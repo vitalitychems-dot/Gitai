@@ -28,12 +28,21 @@ export interface FeedPost {
   createdAt: string;
 }
 
+export type PostInputAuthorKind = typeof PostInputAuthorKind[keyof typeof PostInputAuthorKind];
+
+
+export const PostInputAuthorKind = {
+  human: 'human',
+  agent: 'agent',
+} as const;
+
 export interface PostInput {
   /**
      * @minLength 1
      * @maxLength 1200
      */
   body: string;
+  authorKind?: PostInputAuthorKind;
   /**
      * @maxItems 5
      * @items.maxLength 32
@@ -148,15 +157,57 @@ export interface BountyInput {
   rewardLabel: string;
 }
 
+export type ServiceListingOfferType = typeof ServiceListingOfferType[keyof typeof ServiceListingOfferType];
+
+
+export const ServiceListingOfferType = {
+  product: 'product',
+  'digital-product': 'digital-product',
+  service: 'service',
+  'local-help': 'local-help',
+} as const;
+
+export type ServiceListingSellerKind = typeof ServiceListingSellerKind[keyof typeof ServiceListingSellerKind];
+
+
+export const ServiceListingSellerKind = {
+  human: 'human',
+  agent: 'agent',
+} as const;
+
 export interface ServiceListing {
   id: number;
   title: string;
   description: string;
   category: string;
+  offerType: ServiceListingOfferType;
   priceLabel: string;
+  /** @nullable */
+  priceSol: string | null;
+  /** @nullable */
+  sellerWallet: string | null;
+  sellerKind: ServiceListingSellerKind;
   provider: string;
   turnaround: string;
 }
+
+export type ServiceInputOfferType = typeof ServiceInputOfferType[keyof typeof ServiceInputOfferType];
+
+
+export const ServiceInputOfferType = {
+  product: 'product',
+  'digital-product': 'digital-product',
+  service: 'service',
+  'local-help': 'local-help',
+} as const;
+
+export type ServiceInputSellerKind = typeof ServiceInputSellerKind[keyof typeof ServiceInputSellerKind];
+
+
+export const ServiceInputSellerKind = {
+  human: 'human',
+  agent: 'agent',
+} as const;
 
 export interface ServiceInput {
   /**
@@ -174,6 +225,7 @@ export interface ServiceInput {
      * @maxLength 60
      */
   category: string;
+  offerType: ServiceInputOfferType;
   /**
      * @minLength 1
      * @maxLength 80
@@ -181,8 +233,69 @@ export interface ServiceInput {
   priceLabel: string;
   /**
      * @minLength 1
+     * @pattern ^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,9})?$
+     */
+  priceSol: string;
+  /**
+     * @minLength 32
+     * @maxLength 44
+     */
+  sellerWallet: string;
+  sellerKind: ServiceInputSellerKind;
+  /**
+     * @minLength 1
      * @maxLength 80
      */
   turnaround: string;
 }
+
+export type PaymentStatusFees = {
+  buyerPercent: number;
+  sellerPercent: number;
+  totalPercent: number;
+};
+
+export type PaymentStatusSellerStake = {
+  percentOfGrossSale: number;
+  token: string;
+  lockDays: number;
+};
+
+export type PaymentStatusSettlement = typeof PaymentStatusSettlement[keyof typeof PaymentStatusSettlement];
+
+
+export const PaymentStatusSettlement = {
+  direct: 'direct',
+} as const;
+
+export type PaymentStatusConfigured = {
+  feeWallet: boolean;
+  tokenMint: boolean;
+  stakingProgram: boolean;
+};
+
+export interface PaymentStatus {
+  fees: PaymentStatusFees;
+  sellerStake: PaymentStatusSellerStake;
+  settlement: PaymentStatusSettlement;
+  feesOnTransfersOrCashOuts: boolean;
+  configured: PaymentStatusConfigured;
+  checkoutEnabled: boolean;
+  blockers: string[];
+}
+
+export interface GitHubRepository {
+  fullName: string;
+  htmlUrl: string;
+  description: string;
+  language: string;
+  stars: number;
+  forks: number;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type GetPublicGitHubRepositoryParams = {
+url: string;
+};
 

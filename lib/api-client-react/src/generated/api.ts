@@ -24,7 +24,10 @@ import type {
   Bounty,
   BountyInput,
   FeedPost,
+  GetPublicGitHubRepositoryParams,
+  GitHubRepository,
   HealthStatus,
+  PaymentStatus,
   PostInput,
   Project,
   ProjectInput,
@@ -223,7 +226,7 @@ export const getCreatePostUrl = () => {
 }
 
 /**
- * @summary Publish a community post as the current demo visitor
+ * @summary Publish a community post as a signed-in GitAI member
  */
 export const createPost = async (postInput: PostInput, options?: Parameters<typeof customFetch>[1]): Promise<FeedPost> => {
 
@@ -289,7 +292,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreatePostMutationVariables = {data: BodyType<PostInput>}
 
     /**
- * @summary Publish a community post as the current demo visitor
+ * @summary Publish a community post as a signed-in GitAI member
  */
 export const useCreatePost = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPost>>, TError,CreatePostMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1017,7 +1020,7 @@ export const getCreateServiceUrl = () => {
 }
 
 /**
- * @summary Offer a community service
+ * @summary Create a marketplace product, service, or local-help offer
  */
 export const createService = async (serviceInput: ServiceInput, options?: Parameters<typeof customFetch>[1]): Promise<ServiceListing> => {
 
@@ -1083,7 +1086,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateServiceMutationVariables = {data: BodyType<ServiceInput>}
 
     /**
- * @summary Offer a community service
+ * @summary Create a marketplace product, service, or local-help offer
  */
 export const useCreateService = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createService>>, TError,CreateServiceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1095,4 +1098,165 @@ export const useCreateService = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateServiceMutationOptions(options));
     }
+
+export const getGetPaymentStatusUrl = () => {
+
+
+
+
+  return `/api/gitai/payments/status`
+}
+
+/**
+ * @summary Get marketplace payment configuration and checkout readiness
+ */
+export const getPaymentStatus = async ( options?: Parameters<typeof customFetch>[1]): Promise<PaymentStatus> => {
+
+  return customFetch<PaymentStatus>(getGetPaymentStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPaymentStatusQueryKey = () => {
+    return [
+    `/api/gitai/payments/status`
+    ] as const;
+    }
+
+
+export const getGetPaymentStatusQueryOptions = <TData = Awaited<ReturnType<typeof getPaymentStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaymentStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPaymentStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPaymentStatus>>> = ({ signal }) => getPaymentStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPaymentStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPaymentStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getPaymentStatus>>>
+export type GetPaymentStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get marketplace payment configuration and checkout readiness
+ */
+
+export function useGetPaymentStatus<TData = Awaited<ReturnType<typeof getPaymentStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPaymentStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPaymentStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetPublicGitHubRepositoryUrl = (params: GetPublicGitHubRepositoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gitai/github/repository?${stringifiedParams}` : `/api/gitai/github/repository`
+}
+
+/**
+ * @summary Look up a public GitHub repository
+ */
+export const getPublicGitHubRepository = async (params: GetPublicGitHubRepositoryParams, options?: Parameters<typeof customFetch>[1]): Promise<GitHubRepository> => {
+
+  return customFetch<GitHubRepository>(getGetPublicGitHubRepositoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicGitHubRepositoryQueryKey = (params?: GetPublicGitHubRepositoryParams,) => {
+    return [
+    `/api/gitai/github/repository`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPublicGitHubRepositoryQueryOptions = <TData = Awaited<ReturnType<typeof getPublicGitHubRepository>>, TError = ErrorType<unknown>>(params: GetPublicGitHubRepositoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicGitHubRepository>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicGitHubRepositoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicGitHubRepository>>> = ({ signal }) => getPublicGitHubRepository(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicGitHubRepository>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicGitHubRepositoryQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicGitHubRepository>>>
+export type GetPublicGitHubRepositoryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Look up a public GitHub repository
+ */
+
+export function useGetPublicGitHubRepository<TData = Awaited<ReturnType<typeof getPublicGitHubRepository>>, TError = ErrorType<unknown>>(
+ params: GetPublicGitHubRepositoryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicGitHubRepository>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicGitHubRepositoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

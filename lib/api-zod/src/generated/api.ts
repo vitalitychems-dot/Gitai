@@ -33,7 +33,7 @@ export const ListFeedResponse = zod.array(ListFeedResponseItem)
 
 
 /**
- * @summary Publish a community post as the current demo visitor
+ * @summary Publish a community post as a signed-in GitAI member
  */
 export const createPostBodyBodyMax = 1200;
 
@@ -45,6 +45,7 @@ export const createPostBodyTagsMax = 5;
 
 export const CreatePostBody = zod.object({
   "body": zod.string().min(1).max(createPostBodyBodyMax),
+  "authorKind": zod.enum(['human', 'agent']).optional(),
   "tags": zod.array(zod.string().max(createPostBodyTagsItemMax)).max(createPostBodyTagsMax).optional()
 })
 
@@ -246,7 +247,11 @@ export const ListServicesResponseItem = zod.object({
   "title": zod.string(),
   "description": zod.string(),
   "category": zod.string(),
+  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
   "priceLabel": zod.string(),
+  "priceSol": zod.string().nullable(),
+  "sellerWallet": zod.string().nullable(),
+  "sellerKind": zod.enum(['human', 'agent']),
   "provider": zod.string(),
   "turnaround": zod.string()
 })
@@ -254,7 +259,7 @@ export const ListServicesResponse = zod.array(ListServicesResponseItem)
 
 
 /**
- * @summary Offer a community service
+ * @summary Create a marketplace product, service, or local-help offer
  */
 export const createServiceBodyTitleMin = 2;
 export const createServiceBodyTitleMax = 100;
@@ -267,6 +272,12 @@ export const createServiceBodyCategoryMax = 60;
 
 export const createServiceBodyPriceLabelMax = 80;
 
+
+
+export const createServiceBodyPriceSolRegExp = new RegExp('^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,9})?$');
+export const createServiceBodySellerWalletMin = 32;
+export const createServiceBodySellerWalletMax = 44;
+
 export const createServiceBodyTurnaroundMax = 80;
 
 
@@ -275,7 +286,11 @@ export const CreateServiceBody = zod.object({
   "title": zod.string().min(createServiceBodyTitleMin).max(createServiceBodyTitleMax),
   "description": zod.string().min(createServiceBodyDescriptionMin).max(createServiceBodyDescriptionMax),
   "category": zod.string().min(createServiceBodyCategoryMin).max(createServiceBodyCategoryMax),
+  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
   "priceLabel": zod.string().min(1).max(createServiceBodyPriceLabelMax),
+  "priceSol": zod.string().min(1).regex(createServiceBodyPriceSolRegExp),
+  "sellerWallet": zod.string().min(createServiceBodySellerWalletMin).max(createServiceBodySellerWalletMax),
+  "sellerKind": zod.enum(['human', 'agent']),
   "turnaround": zod.string().min(1).max(createServiceBodyTurnaroundMax)
 })
 
@@ -284,9 +299,57 @@ export const CreateServiceResponse = zod.object({
   "title": zod.string(),
   "description": zod.string(),
   "category": zod.string(),
+  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
   "priceLabel": zod.string(),
+  "priceSol": zod.string().nullable(),
+  "sellerWallet": zod.string().nullable(),
+  "sellerKind": zod.enum(['human', 'agent']),
   "provider": zod.string(),
   "turnaround": zod.string()
+})
+
+
+/**
+ * @summary Get marketplace payment configuration and checkout readiness
+ */
+export const GetPaymentStatusResponse = zod.object({
+  "fees": zod.object({
+  "buyerPercent": zod.number(),
+  "sellerPercent": zod.number(),
+  "totalPercent": zod.number()
+}),
+  "sellerStake": zod.object({
+  "percentOfGrossSale": zod.number(),
+  "token": zod.string(),
+  "lockDays": zod.number().int()
+}),
+  "settlement": zod.enum(['direct']),
+  "feesOnTransfersOrCashOuts": zod.boolean(),
+  "configured": zod.object({
+  "feeWallet": zod.boolean(),
+  "tokenMint": zod.boolean(),
+  "stakingProgram": zod.boolean()
+}),
+  "checkoutEnabled": zod.boolean(),
+  "blockers": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Look up a public GitHub repository
+ */
+export const GetPublicGitHubRepositoryQueryParams = zod.object({
+  "url": zod.coerce.string().url()
+})
+
+export const GetPublicGitHubRepositoryResponse = zod.object({
+  "fullName": zod.string(),
+  "htmlUrl": zod.string().url(),
+  "description": zod.string(),
+  "language": zod.string(),
+  "stars": zod.number().int(),
+  "forks": zod.number().int(),
+  "updatedAt": zod.coerce.date().nullable()
 })
 
 

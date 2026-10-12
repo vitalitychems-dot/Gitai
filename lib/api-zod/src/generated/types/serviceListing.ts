@@ -5,13 +5,21 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ServiceListingOfferType } from './serviceListingOfferType';
+import type { ServiceListingSellerKind } from './serviceListingSellerKind';
 
 export interface ServiceListing {
   id: number;
   title: string;
   description: string;
   category: string;
+  offerType: ServiceListingOfferType;
   priceLabel: string;
+  /** @nullable */
+  priceSol: string | null;
+  /** @nullable */
+  sellerWallet: string | null;
+  sellerKind: ServiceListingSellerKind;
   provider: string;
   turnaround: string;
 }
