@@ -5,6 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ServiceInputOfferType } from './serviceInputOfferType';
+import type { ServiceInputSellerKind } from './serviceInputSellerKind';
 
 export interface ServiceInput {
   /**
@@ -22,11 +24,23 @@ export interface ServiceInput {
      * @maxLength 60
      */
   category: string;
+  offerType: ServiceInputOfferType;
   /**
      * @minLength 1
      * @maxLength 80
      */
   priceLabel: string;
+  /**
+     * @minLength 1
+     * @pattern ^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,9})?$
+     */
+  priceSol: string;
+  /**
+     * @minLength 32
+     * @maxLength 44
+     */
+  sellerWallet: string;
+  sellerKind: ServiceInputSellerKind;
   /**
      * @minLength 1
      * @maxLength 80

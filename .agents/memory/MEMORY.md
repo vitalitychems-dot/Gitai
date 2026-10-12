@@ -1,0 +1,1 @@
+- [GitAI marketplace economics](marketplace-economics.md) — keep the 8% fee split and 5% per-sale 30-day token lock consistent; never enable checkout without on-chain enforcement.

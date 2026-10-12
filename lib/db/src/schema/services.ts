@@ -7,7 +7,11 @@ export const servicesTable = pgTable("gitai_services", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   category: text("category").notNull(),
+  offerType: text("offer_type").notNull().default("service"),
   priceLabel: text("price_label").notNull(),
+  priceSol: text("price_sol"),
+  sellerWallet: text("seller_wallet"),
+  sellerKind: text("seller_kind").notNull().default("human"),
   provider: text("provider").notNull(),
   turnaround: text("turnaround").notNull(),
 });

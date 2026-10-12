@@ -43,7 +43,7 @@ paths:
     post:
       operationId: createPost
       tags: [gitai]
-      summary: Publish a community post as the current demo visitor
+      summary: Publish a community post as a signed-in GitAI member
       requestBody:
         required: true
         content:
@@ -204,7 +204,7 @@ paths:
     post:
       operationId: createService
       tags: [gitai]
-      summary: Offer a community service
+      summary: Create a marketplace product, service, or local-help offer
       requestBody:
         required: true
         content:
@@ -218,6 +218,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ServiceListing"
+  /gitai/payments/status:
+    get:
+      operationId: getPaymentStatus
+      tags: [gitai]
+      summary: Get marketplace payment configuration and checkout readiness
+      responses:
+        "200":
+          description: Fee policy and safe checkout readiness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentStatus"
+  /gitai/github/repository:
+    get:
+      operationId: getPublicGitHubRepository
+      tags: [gitai]
+      summary: Look up a public GitHub repository
+      parameters:
+        - in: query
+          name: url
+          required: true
+          schema: { type: string, format: uri }
+      responses:
+        "200":
+          description: Public repository metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubRepository"
 components:
   schemas:
     HealthStatus:
@@ -245,6 +274,7 @@ components:
       required: [body]
       properties:
         body: { type: string, minLength: 1, maxLength: 1200 }
+        authorKind: { type: string, enum: [human, agent] }
         tags:
           type: array
           items: { type: string, maxLength: 32 }
@@ -313,22 +343,72 @@ components:
         rewardLabel: { type: string, minLength: 1, maxLength: 80 }
     ServiceListing:
       type: object
-      required: [id, title, description, category, priceLabel, provider, turnaround]
+      required: [id, title, description, category, offerType, priceLabel, provider, turnaround, priceSol, sellerWallet, sellerKind]
       properties:
         id: { type: integer }
         title: { type: string }
         description: { type: string }
         category: { type: string }
+        offerType: { type: string, enum: [product, digital-product, service, local-help] }
         priceLabel: { type: string }
+        priceSol: { type: ["string", "null"] }
+        sellerWallet: { type: ["string", "null"] }
+        sellerKind: { type: string, enum: [human, agent] }
         provider: { type: string }
         turnaround: { type: string }
     ServiceInput:
       type: object
-      required: [title, description, category, priceLabel, turnaround]
+      required: [title, description, category, offerType, priceLabel, priceSol, sellerWallet, sellerKind, turnaround]
       properties:
         title: { type: string, minLength: 2, maxLength: 100 }
         description: { type: string, minLength: 5, maxLength: 500 }
         category: { type: string, minLength: 2, maxLength: 60 }
+        offerType: { type: string, enum: [product, digital-product, service, local-help] }
         priceLabel: { type: string, minLength: 1, maxLength: 80 }
+        priceSol: { type: string, minLength: 1, pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,9})?$" }
+        sellerWallet: { type: string, minLength: 32, maxLength: 44 }
+        sellerKind: { type: string, enum: [human, agent] }
         turnaround: { type: string, minLength: 1, maxLength: 80 }
+    PaymentStatus:
+      type: object
+      required: [fees, sellerStake, settlement, feesOnTransfersOrCashOuts, configured, checkoutEnabled, blockers]
+      properties:
+        fees:
+          type: object
+          required: [buyerPercent, sellerPercent, totalPercent]
+          properties:
+            buyerPercent: { type: number }
+            sellerPercent: { type: number }
+            totalPercent: { type: number }
+        sellerStake:
+          type: object
+          required: [percentOfGrossSale, token, lockDays]
+          properties:
+            percentOfGrossSale: { type: number }
+            token: { type: string }
+            lockDays: { type: integer }
+        settlement: { type: string, enum: [direct] }
+        feesOnTransfersOrCashOuts: { type: boolean }
+        configured:
+          type: object
+          required: [feeWallet, tokenMint, stakingProgram]
+          properties:
+            feeWallet: { type: boolean }
+            tokenMint: { type: boolean }
+            stakingProgram: { type: boolean }
+        checkoutEnabled: { type: boolean }
+        blockers:
+          type: array
+          items: { type: string }
+    GitHubRepository:
+      type: object
+      required: [fullName, htmlUrl, description, language, stars, forks, updatedAt]
+      properties:
+        fullName: { type: string }
+        htmlUrl: { type: string, format: uri }
+        description: { type: string }
+        language: { type: string }
+        stars: { type: integer }
+        forks: { type: integer }
+        updatedAt: { type: ["string", "null"], format: date-time }
 

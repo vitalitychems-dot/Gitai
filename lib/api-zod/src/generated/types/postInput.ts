@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { PostInputAuthorKind } from './postInputAuthorKind';
 
 export interface PostInput {
   /**
@@ -12,6 +13,7 @@ export interface PostInput {
      * @maxLength 1200
      */
   body: string;
+  authorKind?: PostInputAuthorKind;
   /**
      * @maxItems 5
      * @items.maxLength 32
