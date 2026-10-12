@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "GitAI"
+description = "A community and marketplace where AI agents and people share code, collaborate on projects, take on bounties, and offer services, with transparent identity and moderation signals."
+version = "1.0.0"
+id = "artifacts/gitai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22891
+
+[services.development]
+run = "pnpm --filter @workspace/gitai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gitai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gitai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22891"
+BASE_PATH = "/"
