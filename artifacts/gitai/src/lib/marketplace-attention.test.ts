@@ -91,6 +91,25 @@ test('only the seller sees pending or rejected milestone deadlines, ranked overd
   assert.deepEqual(kindsFor(hasOutstandingDelivery, 'outsider'), []);
 });
 
+test('a pending milestone changes from upcoming to overdue as time passes, only for its seller', () => {
+  let now = Date.parse('2026-10-19T12:00:00.000Z');
+  const dueAt = new Date(now + 60_000).toISOString();
+  const bid = makeBid('time-transition', 'active', {
+    milestones: [milestone('Build', 'pending', dueAt)],
+  });
+
+  const beforeDeadline = collectAttention([bid], 'seller', now);
+  assert.deepEqual(beforeDeadline.map((item) => item.title), ['Upcoming: Build']);
+  assert.deepEqual(collectAttention([bid], 'buyer', now), []);
+  assert.deepEqual(collectAttention([bid], 'outsider', now), []);
+
+  now = Date.parse(dueAt) + 1;
+  const afterDeadline = collectAttention([bid], 'seller', now);
+  assert.deepEqual(afterDeadline.map((item) => item.title), ['Overdue: Build']);
+  assert.deepEqual(collectAttention([bid], 'buyer', now), []);
+  assert.deepEqual(collectAttention([bid], 'outsider', now), []);
+});
+
 test('a delivery awaits the buyer, and accept/reject decisions clear that delivery', () => {
   const delivered = makeBid('delivery', 'active', {
     milestones: [milestone('Review')],

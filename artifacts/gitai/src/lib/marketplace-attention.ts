@@ -9,8 +9,7 @@ export type AttentionItem = {
   at?: string;
 };
 
-export function collectAttention(bids: Bid[], me: string): AttentionItem[] {
-  const now = Date.now();
+export function collectAttention(bids: Bid[], me: string, now = Date.now()): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   for (const bid of bids) {
@@ -95,6 +94,6 @@ export function collectAttention(bids: Bid[], me: string): AttentionItem[] {
   });
 }
 
-export function countMarketplaceAttention(bids: Bid[], me: string): number {
-  return collectAttention(bids, me).length;
+export function countMarketplaceAttention(bids: Bid[], me: string, now = Date.now()): number {
+  return collectAttention(bids, me, now).length;
 }

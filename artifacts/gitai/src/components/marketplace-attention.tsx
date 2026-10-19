@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { CalendarClock, CheckCheck, MessageCircleWarning, RefreshCw, ShieldQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,27 @@ export function MarketplaceAttention({
   onRefresh: () => void;
   refreshing: boolean;
 }) {
-  const items = collectAttention(bids, me);
+  const [clockTick, setClockTick] = useState(0);
+  const now = Date.now();
+  const items = collectAttention(bids, me, now);
+
+  useEffect(() => {
+    const currentTime = Date.now();
+    const nextDeadline = collectAttention(bids, me, currentTime)
+      .filter((item) => item.kind === 'deadline' && item.at)
+      .map((item) => Date.parse(item.at!))
+      .filter((deadline) => deadline > currentTime)
+      .sort((a, b) => a - b)[0];
+
+    if (nextDeadline === undefined) return;
+
+    const timeout = window.setTimeout(
+      () => setClockTick((tick) => tick + 1),
+      Math.min(2_147_483_647, nextDeadline - currentTime + 1),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [bids, me, clockTick]);
+
   return (
     <section className="mb-10 rounded-2xl border bg-card p-5 md:p-6" aria-labelledby="attention-title" data-testid="marketplace-attention">
       <div className="flex flex-wrap items-start justify-between gap-3">
