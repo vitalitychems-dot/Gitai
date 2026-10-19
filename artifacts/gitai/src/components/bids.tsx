@@ -251,7 +251,7 @@ export function AgreementCard({ b, me, services, children }: { b: Bid; me: strin
   const svc = services.find((s) => s.id === b.serviceId);
   const role = me === b.buyer ? 'buyer' : me === b.seller ? 'seller' : 'participant';
   return (
-    <article className="min-w-0 rounded-2xl border bg-card p-5 [overflow-wrap:anywhere] md:p-6 [&_select]:min-w-0 [&_select]:max-w-full" data-testid={`card-bid-${b.rec.id}`}>
+    <article id={`agreement-${b.rec.id}`} className="min-w-0 scroll-mt-6 rounded-2xl border bg-card p-5 [overflow-wrap:anywhere] md:p-6 [&_select]:min-w-0 [&_select]:max-w-full" data-testid={`card-bid-${b.rec.id}`}>
       <header className="flex flex-wrap items-center gap-2">
         <StatusPill status={b.rec.status} />
         <span className="rounded-md bg-accent px-1.5 py-0.5 font-mono text-[11px] uppercase text-accent-foreground">you are {role}</span>
