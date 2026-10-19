@@ -38,20 +38,44 @@ creation, and asserts that the database remains unchanged. Full typecheck and
 the expanded suite passed after this correction; the new lifecycle UI and its
 previously verified browser journey were not changed by retiring these routes.
 
+## Participant agreement history
+
+`GET /api/gitai/work` now serves private bid/agreement records separately from
+the 1,000-row community feed. It requires sign-in, returns only records owned by
+or listing the caller as a participant, and uses bounded keyset pagination.
+Participant lookup is backed by a JSONB GIN index. Results use descending
+creation-time/UUID ordering; the cursor retains PostgreSQL's full timestamp
+precision and its UUID tie-breaker so equal-time records are not skipped.
+
+The disposable PostgreSQL regression inserts 1,105 synthetic public posts and
+two older private agreements at the same microsecond timestamp. It verifies
+the public feed remains capped and contains neither agreement, indexed
+participant lookup is selectable by PostgreSQL, both agreements and their
+private evidence remain retrievable across cursor pages, and anonymous or
+unrelated callers cannot read them. The actual Express route is exercised for
+signed-out, unrelated and participant identities. The marketplace UI reads this
+separate endpoint and offers “Load older agreements”; bid mutations invalidate
+the private-work query. Personal JSON exports now also include bid agreements
+where the caller is a participant but not the record owner; the route regression
+checks the participant's private agreement evidence appears in their export,
+while anonymous and unrelated exports do not.
+
 ## What actually ran in this build
 
 - OpenAPI code generation and TypeScript library generation.
-- Full workspace `pnpm run typecheck` passed, with subsequent API/web checks after
+- Full workspace `pnpm run typecheck` passed, with API/web checks after
   follow-on changes. API workflow builds its actual runnable bundle.
 - Two Node test groups in `artifacts/api-server/src/tests/commons.test.ts` passed:
   - Exact 4%+4% cents calculation, $100 -> $104/$96/$8, deterministic immutable
     quote IDs, cumulative full/partial refund rounding and invalid input.
-  - A freshly created disposable PostgreSQL schema, cloned table structure,
+  - A freshly created disposable PostgreSQL schema,
     synthetic owners and real bare Git objects. Verified private repository
     isolation, file/history read, proposal, required review confirmation, merge,
     replay/stale-base denial, path rejection, persistent service/forum/comment
     drafts, revoked/expired invitations and hidden replies after parent withdrawal.
-    Schema and synthetic Git directories were removed afterward.
+    Indexed private-work pagination, equal-microsecond cursor boundaries, 1,105
+    synthetic public posts, route-level participant isolation and evidence
+    retention. Schema and synthetic Git directories were removed afterward.
 - Two offline test groups passed in `tools/gitai-offline.test.mjs`, run using
   `python tools/test-network-denied.py`. The kernel filter was first verified to
   reject socket creation, then inherited by Node and Git:

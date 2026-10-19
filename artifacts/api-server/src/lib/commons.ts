@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, or, sql, desc } from "drizzle-orm";
+import { and, desc, eq, lt, ne, or, sql } from "drizzle-orm";
 import { db, commonsRecords as records, type CommonsRecordRow } from "@workspace/db";
 import { CreateRecordBody, ChangeRecordBody, ProposeChangeBody, MergeChangeBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
@@ -44,9 +44,14 @@ export function canRead(row: CommonsRecordRow, actor: string) {
     (row.status === "approved" && !["invitation", "report", "block"].includes(row.kind) && row.data.visibility !== "private");
 }
 export async function listRecords(actor: string) {
-  const result = await db.select().from(records).where(isOwner(actor) ? undefined : actor
-    ? or(eq(records.owner, actor), eq(records.status, "approved"), sql`${records.data}->'parties' ? ${actor}`, sql`${records.data}->'participants' @> ${JSON.stringify([actor])}::jsonb`)
-    : eq(records.status, "approved")).orderBy(desc(records.createdAt)).limit(1000);
+  // Work agreements have their own participant-indexed, cursor-paged endpoint.
+  // Exclude them in SQL before LIMIT so they cannot consume community-feed slots.
+  const communityScope = isOwner(actor) ? undefined : actor
+    ? or(eq(records.owner, actor), eq(records.status, "approved"))
+    : eq(records.status, "approved");
+  const feedScope = communityScope ? and(ne(records.kind, "bid"), communityScope) : ne(records.kind, "bid");
+  const result = await db.select().from(records).where(feedScope)
+    .orderBy(desc(records.createdAt), desc(records.id)).limit(1000);
   const blocked = new Set(result.filter(r => r.kind === "block" && r.owner === actor).map(r => r.data.subject));
   const index = new Map(result.map(r => [r.id, r]));
   const visibleParent = (r: CommonsRecordRow, depth = 0): boolean => {
@@ -58,6 +63,66 @@ export async function listRecords(actor: string) {
   };
   // Community blocking must not hide an existing agreement or its evidence.
   return result.filter(r => canRead(r, actor) && r.status !== "deleted" && (r.kind === "bid" || isParty(r, actor) || !blocked.has(r.owner)) && visibleParent(r)).map(serial);
+}
+const workPageQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().regex(/^[A-Za-z0-9_-]+$/).max(256).optional(),
+}).strict();
+const cursorPayload = z.object({ createdAt: z.iso.datetime(), id: z.uuid() }).strict();
+function decodeWorkCursor(cursor: string) {
+  try {
+    const bytes = Buffer.from(cursor, "base64url");
+    if (bytes.length > 192 || bytes.toString("base64url") !== cursor) fail("Invalid work cursor.");
+    const parsed = cursorPayload.parse(JSON.parse(bytes.toString("utf8")));
+    return parsed;
+  } catch { fail("Invalid work cursor."); }
+}
+function encodeWorkCursor(createdAt: string, id: string) {
+  return Buffer.from(JSON.stringify({ createdAt, id })).toString("base64url");
+}
+export async function listPrivateWork(actor: string, options: unknown = {}) {
+  if (!actor) fail("Sign in to view private agreements.", 401);
+  const query = workPageQuery.parse(options);
+  const conditions = [
+    eq(records.kind, "bid"),
+    ne(records.status, "deleted"),
+    sql`${records.data} @> ${JSON.stringify({ participants: [actor] })}::jsonb`,
+  ];
+  if (query.cursor) {
+    const cursor = decodeWorkCursor(query.cursor);
+    conditions.push(or(
+      sql`${records.createdAt} < ${cursor.createdAt}::timestamptz`,
+      and(sql`${records.createdAt} = ${cursor.createdAt}::timestamptz`, lt(records.id, cursor.id)),
+    )!);
+  }
+  const fetched = await db.select({
+    record: records,
+    cursorTimestamp: sql<string>`to_char(${records.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+  }).from(records).where(and(...conditions))
+    .orderBy(desc(records.createdAt), desc(records.id)).limit(query.limit + 1);
+  // Participant access preserves older records/evidence through community blocks;
+  // blocks continue to filter public/feed content, never erase signed work history.
+  const visible = fetched.filter(item => canRead(item.record, actor));
+  const more = visible.length > query.limit;
+  const page = visible.slice(0, query.limit);
+  return {
+    records: page.map(item => serial(item.record)),
+    limit: query.limit,
+    nextCursor: more && page.length
+      ? encodeWorkCursor(page[page.length - 1].cursorTimestamp, page[page.length - 1].record.id)
+      : null,
+  };
+}
+export async function exportPersonalRecords(actor: string) {
+  if (!actor) fail("Sign in to export your own data.", 401);
+  const agreements = and(
+    eq(records.kind, "bid"),
+    sql`${records.data} @> ${JSON.stringify({ participants: [actor] })}::jsonb`,
+  );
+  const owned = await db.select().from(records)
+    .where(or(eq(records.owner, actor), agreements))
+    .orderBy(desc(records.createdAt), desc(records.id));
+  return owned.map(serial);
 }
 // A DB transaction lock serializes operator quotas and all Git operations.
 async function locked<T>(fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {

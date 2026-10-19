@@ -52,6 +52,7 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
       owner text NOT NULL, status text NOT NULL DEFAULT 'pending', namespace text UNIQUE,
       data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
     )`);
+    await client.query(`CREATE INDEX gitai_participant_lookup_gin_idx ON "${schema}".gitai_records USING gin (data)`);
     await client.query(`SET search_path TO "${schema}"`);
     client.release();
     const alice = commons.subject("synthetic-alice"), bob = commons.subject("synthetic-bob");
@@ -114,9 +115,11 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     assert.equal(bid.status, "proposed");
     assert.equal((bid.data.quote as ReturnType<typeof quoteFees>).buyerTotalMinor, 10400);
     assert.equal((bid.data.quote as ReturnType<typeof quoteFees>).sellerNetMinor, 9600);
-    assert.equal((await commons.listRecords(alice)).some(r => r.id === bid.id), true);
+    assert.equal((await commons.listRecords(alice)).some(r => r.id === bid.id), false);
     assert.equal((await commons.listRecords("")).some(r => r.id === bid.id), false);
     assert.equal((await commons.listRecords(outsider)).some(r => r.id === bid.id), false);
+    assert.equal((await commons.listPrivateWork(alice)).records.some(r => r.id === bid.id), true);
+    assert.equal((await commons.listPrivateWork(outsider)).records.some(r => r.id === bid.id), false);
     await assert.rejects(commons.changeRecord(bob, bid.id, { action: "approve" }), /immutable/);
     await assert.rejects(commons.changeRecord(outsider, bid.id, { action: "delete" }), /not found/);
     await assert.rejects(actOnBid(outsider, bid.id, { action: "consent", ...identity }), /not found/);
@@ -134,7 +137,7 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     assert.equal((await actOnBid(carol, child.id, { action: "consent", ...identity })).status, "proposed");
     await assert.rejects(actOnBid(carol, child.id, { action: "deliver", milestone: 0, note: "No upstream permission", executable: false }), /every required consent/);
     assert.equal((await actOnBid(bob, child.id, { action: "consent", operatorKind: "business", operatorLabel: "Synthetic company operator" })).status, "active");
-    assert.equal((await commons.listRecords(bob)).some(r => r.id === child.id), true);
+    assert.equal((await commons.listPrivateWork(bob)).records.some(r => r.id === child.id), true);
     await assert.rejects(createBid(carol, { ...terms, parentBidId: child.id, sellerSubject: outsider }), /Further subcontract/);
     await assert.rejects(actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Bad link", executable: false, evidenceUrl: "http://example.com" }), /HTTPS/);
     let work = await actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Manual report: found ambiguous wording.", executable: false, evidenceUrl: "https://example.com/report" });
@@ -181,7 +184,7 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     assert.equal(consentRace.filter(r => r.status === "rejected").length, 1);
     // Blocking a community author must not erase the buyer's work/evidence.
     await commons.createRecord(alice, { kind: "block", title: "Synthetic community block", body: "", data: { subject: bob } });
-    assert.equal((await commons.listRecords(alice)).some(r => r.id === multi.id), true);
+    assert.equal((await commons.listPrivateWork(alice)).records.some(r => r.id === multi.id), true);
     for (const milestone of [0, 1]) {
       multi = await actOnBid(bob, multi.id, { action: "deliver", milestone, note: "Manual findings for this milestone", executable: false });
       multi = await actOnBid(alice, multi.id, { action: "accept", milestone, eventId: latest(multi, "deliver"), note: "Reviewed scoped findings" });
@@ -190,6 +193,72 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     const expired = await createBid(bob, terms);
     await pool.query("UPDATE gitai_records SET data = jsonb_set(data, '{deadline}', to_jsonb($1::text)) WHERE id = $2", ["2020-01-01T00:00:00.000Z", expired.id]);
     await assert.rejects(actOnBid(alice, expired.id, { action: "consent", ...identity }), /expired/);
+    // Private work is indexed and cursor-paged independently of the public feed.
+    // Deliberately use identical sub-millisecond timestamps to exercise a stable keyset boundary.
+    const historicalIds: string[] = [randomUUID(), randomUUID()];
+    const historicalTime = "2000-01-01T00:00:00.123456Z";
+    await pool.query(
+      `INSERT INTO gitai_records (id, kind, title, body, owner, status, data, created_at)
+       VALUES
+         ($1, 'bid', 'Historical agreement A', 'Private scope A', $2, 'resolved',
+          $4::jsonb, $6::timestamptz),
+         ($3, 'bid', 'Historical agreement B', 'Private scope B', $2, 'completed',
+          $5::jsonb, $6::timestamptz)`,
+      [
+        historicalIds[0], alice, historicalIds[1],
+        JSON.stringify({ participants: [alice, bob], events: [{ id: randomUUID(), action: "evidence", actor: bob, at: historicalTime, note: "Private dispute evidence A." }] }),
+        JSON.stringify({ participants: [alice, bob], events: [{ id: randomUUID(), action: "evidence", actor: alice, at: historicalTime, note: "Private delivery evidence B." }] }),
+        historicalTime,
+      ],
+    );
+    const floodIds = Array.from({ length: 1105 }, () => randomUUID());
+    await pool.query(
+      `INSERT INTO gitai_records (id, kind, title, body, owner, status, data, created_at)
+       SELECT generated.id::text, 'post', 'Synthetic public load ' || generated.ordinality::text,
+         'Isolated pagination fixture only.', $1, 'approved',
+         '{"topic":"load-test","label":"opinion"}'::jsonb,
+         '2030-01-01T00:00:00Z'::timestamptz + (generated.ordinality * interval '1 millisecond')
+       FROM unnest($2::uuid[]) WITH ORDINALITY AS generated(id, ordinality)`,
+      [bob, floodIds],
+    );
+    await pool.query("ANALYZE gitai_records");
+    const indexes = await pool.query(
+      "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'gitai_records'",
+    );
+    const indexNames = indexes.rows.map((r: { indexname: string }) => r.indexname);
+    assert.ok(indexNames.includes("gitai_participant_lookup_gin_idx"));
+    const planConnection = await pool.connect();
+    try {
+      await planConnection.query("BEGIN");
+      await planConnection.query("SET LOCAL enable_seqscan = off");
+      const planResult = await planConnection.query(
+        "EXPLAIN (FORMAT JSON) SELECT id FROM gitai_records WHERE kind = 'bid' AND data @> $1::jsonb ORDER BY created_at DESC, id DESC LIMIT 51",
+        [JSON.stringify({ participants: [alice] })],
+      );
+      assert.match(JSON.stringify(planResult.rows), /gitai_participant_lookup_gin_idx/);
+      await planConnection.query("COMMIT");
+    } catch (e) {
+      await planConnection.query("ROLLBACK");
+      throw e;
+    } finally { planConnection.release(); }
+    assert.equal((await commons.listRecords("synthetic-outsider")).length, 1000);
+    assert.equal((await commons.listRecords("synthetic-outsider")).some(r => historicalIds.includes(r.id)), false);
+    assert.equal((await commons.listRecords(alice)).some(r => historicalIds.includes(r.id)), false);
+    let cursor: string | undefined;
+    const retrieved = new Map<string, Record<string, unknown>>();
+    for (let page = 0; page < 30; page++) {
+      const result = await commons.listPrivateWork(alice, { limit: 2, ...(cursor ? { cursor } : {}) });
+      for (const record of result.records) retrieved.set(record.id, record as unknown as Record<string, unknown>);
+      cursor = result.nextCursor ?? undefined;
+      if (!cursor) break;
+    }
+    assert.ok(!cursor, "cursor pagination should exhaust the participant's small work history");
+    assert.deepEqual(historicalIds.map(id => retrieved.has(id)), [true, true]);
+    assert.match(JSON.stringify(retrieved.get(historicalIds[0])?.data), /Private dispute evidence A/);
+    assert.match(JSON.stringify(retrieved.get(historicalIds[1])?.data), /Private delivery evidence B/);
+    assert.deepEqual((await commons.listPrivateWork(outsider, { limit: 2 })).records, []);
+    await assert.rejects(commons.listPrivateWork("", {}), /Sign in/);
+    await assert.rejects(commons.listPrivateWork(alice, { cursor: "YQ" }), /Invalid work cursor/);
     // Exercise the actual Express routes with synthetic authenticated middleware
     // output. This local test server has no production auth bypass or real user.
     const app = express();
@@ -203,12 +272,52 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
       next();
     });
     app.use("/api", gitaiRouter);
+    app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      const status = typeof error === "object" && error && "status" in error &&
+        typeof error.status === "number" ? error.status : 500;
+      res.status(status).json({ error: status === 401 ? "Sign in to view private agreements." : "Request denied." });
+    });
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>(resolve => server.once("listening", resolve));
     try {
       const address = server.address();
       assert.ok(address && typeof address === "object");
       const base = `http://127.0.0.1:${address.port}/api`;
+      async function getWork(user: string, cursor?: string) {
+        const params = new URLSearchParams({ limit: "2", ...(cursor ? { cursor } : {}) });
+        return fetch(`${base}/gitai/work?${params}`, { headers: { "x-synthetic-user": user } });
+      }
+      async function getExport(user: string) {
+        return fetch(`${base}/gitai/export`, { headers: { "x-synthetic-user": user } });
+      }
+      const anonymousWork = await getWork("anonymous");
+      assert.equal(anonymousWork.status, 401);
+      assert.equal((await getExport("anonymous")).status, 401);
+      const participantExport = await getExport("synthetic-bob");
+      assert.equal(participantExport.status, 200);
+      const exportedRecords = (await participantExport.json() as { records: { id: string; data: unknown }[] }).records;
+      assert.deepEqual(historicalIds.map(id => exportedRecords.some(record => record.id === id)), [true, true]);
+      assert.match(JSON.stringify(exportedRecords.filter(record => historicalIds.includes(record.id))), /Private (dispute|delivery) evidence/);
+      const unrelatedExport = await getExport("synthetic-outsider");
+      assert.deepEqual((await unrelatedExport.json() as { records: unknown[] }).records, []);
+      const strangerPage = await getWork("synthetic-outsider");
+      const strangerBody = await strangerPage.json() as { records: unknown[] };
+      assert.deepEqual(strangerBody.records, []);
+      const publicState = await fetch(`${base}/gitai/state`, { headers: { "x-synthetic-user": "synthetic-outsider" } });
+      const stateBody = await publicState.json() as { records: { id: string }[] };
+      assert.equal(stateBody.records.some(r => historicalIds.includes(r.id)), false);
+      let workCursor: string | undefined;
+      const pagedIds = new Set<string>();
+      for (let page = 0; page < 30; page++) {
+        const response = await getWork("synthetic-alice", workCursor);
+        assert.equal(response.status, 200);
+        const payload = await response.json() as { records: { id: string }[]; nextCursor: string | null };
+        for (const record of payload.records) pagedIds.add(record.id);
+        workCursor = payload.nextCursor ?? undefined;
+        if (!workCursor) break;
+      }
+      assert.equal(pagedIds.has(historicalIds[0]), true);
+      assert.equal(pagedIds.has(historicalIds[1]), true);
       const attempts = [
         { path: `/gitai/services/${service.id}/bids`, body: { subtotalMinor: 10000, deadlineDays: 7, scope: terms.scope, milestones: [] } },
         { path: `/gitai/services/${service.id}/bids/${bid.id}/accept`, body: {} },

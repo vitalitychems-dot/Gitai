@@ -199,6 +199,20 @@ export interface Commons {
   capabilities: CommonsCapabilities;
 }
 
+export interface WorkPage {
+  records: CommunityRecord[];
+  /**
+     * @maxLength 256
+     * @nullable
+     */
+  nextCursor: string | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  limit: number;
+}
+
 export interface RepoFile {
   path: string;
   content: string;
@@ -366,4 +380,16 @@ export interface DataExport {
 export interface HealthStatus {
   status: string;
 }
+
+export type GetMyWorkParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @maxLength 256
+ */
+cursor?: string;
+};
 

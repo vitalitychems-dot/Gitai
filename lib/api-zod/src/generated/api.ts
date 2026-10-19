@@ -125,6 +125,40 @@ export const GetCommonsResponse = zod.object({
 })
 
 
+export const getMyWorkQueryLimitDefault = 50;
+export const getMyWorkQueryLimitMax = 100;
+
+export const getMyWorkQueryCursorMax = 256;
+
+
+
+export const GetMyWorkQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(getMyWorkQueryLimitMax).default(getMyWorkQueryLimitDefault),
+  "cursor": zod.coerce.string().max(getMyWorkQueryCursorMax).optional()
+})
+
+export const getMyWorkResponseNextCursorMax = 256;
+
+export const getMyWorkResponseLimitMax = 100;
+
+
+
+export const GetMyWorkResponse = zod.object({
+  "records": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})),
+  "nextCursor": zod.string().max(getMyWorkResponseNextCursorMax).nullable(),
+  "limit": zod.number().int().min(1).max(getMyWorkResponseLimitMax)
+})
+
+
 export const createRecordBodyTitleMax = 120;
 
 export const createRecordBodyBodyMax = 10000;

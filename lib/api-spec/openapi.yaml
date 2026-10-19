@@ -52,6 +52,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Commons" }
+  /gitai/work:
+    get:
+      operationId: getMyWork
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 256 } }
+      responses:
+        "200":
+          description: Private work records for the signed-in participant, in stable cursor pages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkPage" }
+        "401":
+          description: Sign-in is required
   /gitai/records:
     post:
       operationId: createRecord
@@ -347,6 +361,15 @@ components:
             gateway: { type: string }
             admission: { type: string }
             offline: { type: string }
+    WorkPage:
+      type: object
+      required: [records, nextCursor, limit]
+      properties:
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+        nextCursor: { type: ["string", "null"], maxLength: 256 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
     RepositoryDetail:
       type: object
       required: [repository, files, commits, proposals, head]

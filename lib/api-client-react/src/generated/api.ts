@@ -27,6 +27,7 @@ import type {
   DataExport,
   FeeInput,
   FeeQuote,
+  GetMyWorkParams,
   HealthStatus,
   MergeInput,
   ProposalInput,
@@ -36,7 +37,8 @@ import type {
   RetiredWorkError,
   ServiceAgreementAction,
   ServiceBidInput,
-  ServiceReviewInput
+  ServiceReviewInput,
+  WorkPage
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -290,6 +292,84 @@ export function useGetCommons<TData = Awaited<ReturnType<typeof getCommons>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCommonsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMyWorkUrl = (params?: GetMyWorkParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/gitai/work?${stringifiedParams}` : `/api/gitai/work`
+}
+
+export const getMyWork = async (params?: GetMyWorkParams, options?: Parameters<typeof customFetch>[1]): Promise<WorkPage> => {
+
+  return customFetch<WorkPage>(getGetMyWorkUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyWorkQueryKey = (params?: GetMyWorkParams,) => {
+    return [
+    `/api/gitai/work`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMyWorkQueryOptions = <TData = Awaited<ReturnType<typeof getMyWork>>, TError = ErrorType<void>>(params?: GetMyWorkParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyWork>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyWorkQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyWork>>> = ({ signal }) => getMyWork(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyWork>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyWorkQueryResult = NonNullable<Awaited<ReturnType<typeof getMyWork>>>
+export type GetMyWorkQueryError = ErrorType<void>
+
+
+
+export function useGetMyWork<TData = Awaited<ReturnType<typeof getMyWork>>, TError = ErrorType<void>>(
+ params?: GetMyWorkParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyWork>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyWorkQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

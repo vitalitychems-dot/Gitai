@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Plus, Search } from 'lucide-react';
+import { getGetMyWorkQueryKey, useGetMyWork, type CommunityRecord } from '@workspace/api-client-react';
 import { useCommons, useCreate, useRecords } from '@/hooks/use-commons';
 import { EmptyPlot, ErrorPanel, Field, ListSkeleton, PageHead, SignInGate, StatusPill, Tag, fieldClass } from '@/components/bits';
 import { RecordActions } from '@/components/record-actions';
@@ -51,7 +52,28 @@ export default function Marketplace() {
   const [open, setOpen] = useState(false);
   const [bidOn, setBidOn] = useState<string | null>(null);
   const me = q.data?.subject ?? '';
-  const bids = useRecords('bid').map(parseBid).filter((b) => b.participants.includes(me));
+  const [workCursor, setWorkCursor] = useState<string | null>(null);
+  const [olderWork, setOlderWork] = useState<CommunityRecord[]>([]);
+  const [workOwner, setWorkOwner] = useState('');
+  useEffect(() => {
+    setWorkOwner(me);
+    setWorkCursor(null);
+    setOlderWork([]);
+  }, [me]);
+  const workParams = { limit: 40, ...(workCursor ? { cursor: workCursor } : {}) };
+  const workQuery = useGetMyWork(workParams, {
+    query: {
+      queryKey: [...getGetMyWorkQueryKey(workParams), me || 'anonymous'],
+      enabled: !!me,
+      refetchInterval: 20000,
+      refetchOnWindowFocus: true,
+    },
+  });
+  const currentWork = workOwner === me ? workQuery.data?.records ?? [] : [];
+  const privateWorkRows = [...olderWork, ...currentWork];
+  const uniqueWork = [...new Map(privateWorkRows.map((r) => [r.id, r])).values()];
+  const bids = uniqueWork.map(parseBid).filter((b) => b.participants.includes(me));
+  const hasMoreWork = workOwner === me && !!workQuery.data?.nextCursor;
   const [term, setTerm] = useState('');
   const [type, setType] = useState<'all' | 'offer' | 'request'>('all');
   const t = term.trim().toLowerCase();
@@ -112,8 +134,18 @@ export default function Marketplace() {
         <section className="mt-12" data-testid="section-agreements">
           <h2 className="font-display text-2xl font-extrabold">Your private agreements</h2>
           <p className="mb-4 mt-1 text-sm text-muted-foreground">Visible only to participants. Terms are immutable; every step is an append-only event. Payment provider prerequisites are unverified, so nothing is charged, held or paid out.</p>
-          {bids.length === 0 ? <EmptyPlot title="No agreements yet.">Bid on an approved service to start one. Every participant consents before work becomes active.</EmptyPlot>
-            : <div className="space-y-6">{bids.map((b) => <AgreementCard key={b.rec.id} b={b} me={me} services={services} />)}</div>}
+          {workOwner !== me || workQuery.isLoading ? <ListSkeleton rows={2} />
+            : workQuery.isError ? <ErrorPanel error={workQuery.error} onRetry={() => workQuery.refetch()} />
+              : bids.length === 0 ? <EmptyPlot title="No agreements yet.">Bid on an approved service to start one. Every participant consents before work becomes active.</EmptyPlot>
+                : <div className="space-y-6">
+                    {bids.map((b) => <AgreementCard key={b.rec.id} b={b} me={me} services={services} />)}
+                    {hasMoreWork && <Button variant="outline" onClick={() => {
+                      const next = workQuery.data?.nextCursor;
+                      if (!next) return;
+                      setOlderWork((previous) => [...new Map([...previous, ...currentWork].map((r) => [r.id, r])).values()]);
+                      setWorkCursor(next);
+                    }} data-testid="button-load-older-work">Load older agreements</Button>}
+                  </div>}
         </section>
       )}
     </>

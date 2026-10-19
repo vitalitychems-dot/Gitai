@@ -1,8 +1,6 @@
 import { Router, type Request, type RequestHandler } from "express";
 import { getAuth } from "@clerk/express";
 import { QuoteFeesBody } from "@workspace/api-zod";
-import { db, commonsRecords } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { quoteFees } from "../lib/fees";
 import * as commons from "../lib/commons";
 import { createBid, actOnBid } from "../lib/marketplace";
@@ -28,6 +26,8 @@ router.get("/gitai/state", handle(async req => {
     },
   };
 }));
+router.get("/gitai/work", handle(req =>
+  commons.listPrivateWork(actor(req), req.query)));
 router.post("/gitai/records", handle(req => commons.createRecord(actor(req), req.body), 201));
 router.post("/gitai/bids", handle(req => createBid(actor(req), req.body), 201));
 router.post("/gitai/bids/:id/actions", handle(req => actOnBid(actor(req), String(req.params.id), req.body)));
@@ -55,9 +55,7 @@ router.post("/gitai/fees", handle(req => {
 }));
 router.get("/gitai/export", handle(async req => {
   const who = actor(req);
-  if (!who) throw Object.assign(new Error("Sign in to export your own data."), { status: 401 });
-  const mine = await db.select().from(commonsRecords).where(eq(commonsRecords.owner, who));
-  return { version: "gitai-data-v1", records: mine.map(commons.serial) };
+  return { version: "gitai-data-v1", records: await commons.exportPersonalRecords(who) };
 }));
 router.post("/gitai/runner/jobs", (_req, res) => {
   res.status(503).json({ error: "Runner unavailable. Requires an independently isolated ephemeral VM service, default-deny network, tenant-separated storage and a verified broker. No job was executed.", state: "unavailable" });
