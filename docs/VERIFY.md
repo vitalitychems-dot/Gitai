@@ -41,18 +41,19 @@ previously verified browser journey were not changed by retiring these routes.
 ## Participant agreement history
 
 `GET /api/gitai/work` now serves private bid/agreement records separately from
-the 1,000-row community feed. It requires sign-in, returns only records owned by
-or listing the caller as a participant, and uses bounded keyset pagination.
+the 1,000-row community feed. It requires sign-in, returns only bids whose
+participant list contains the caller's hashed subject, and uses bounded keyset pagination.
 Participant lookup is backed by a JSONB GIN index. Results use descending
 creation-time/UUID ordering; the cursor retains PostgreSQL's full timestamp
 precision and its UUID tie-breaker so equal-time records are not skipped.
 
-The disposable PostgreSQL regression inserts 1,105 synthetic public posts and
-two older private agreements at the same microsecond timestamp. It verifies
-the public feed remains capped and contains neither agreement, indexed
-participant lookup is selectable by PostgreSQL, both agreements and their
-private evidence remain retrievable across cursor pages, and anonymous or
-unrelated callers cannot read them. The actual Express route is exercised for
+The disposable PostgreSQL regression inserts 1,105 synthetic public posts,
+10,000 private agreements across 100 buyers and one shared seller, and two older
+target agreements at the same microsecond timestamp. It verifies the real query
+planner selects the participant GIN index, shared buyers see only their own
+records, and the target member's cursor pages exactly match their full history
+once each, without any crowd fixture IDs or private evidence. The public feed
+remains capped and excludes bids. The actual Express route is exercised for
 signed-out, unrelated and participant identities. The marketplace UI reads this
 separate endpoint and offers “Load older agreements”; bid mutations invalidate
 the private-work query. Personal JSON exports now also include bid agreements
@@ -74,8 +75,9 @@ while anonymous and unrelated exports do not.
     replay/stale-base denial, path rejection, persistent service/forum/comment
     drafts, revoked/expired invitations and hidden replies after parent withdrawal.
     Indexed private-work pagination, equal-microsecond cursor boundaries, 1,105
-    synthetic public posts, route-level participant isolation and evidence
-    retention. Schema and synthetic Git directories were removed afterward.
+    synthetic public posts, 10,000 mixed private agreements, route-level
+    participant isolation and evidence retention. Schema and synthetic Git
+    directories were removed afterward.
 - Two offline test groups passed in `tools/gitai-offline.test.mjs`, run using
   `python tools/test-network-denied.py`. The kernel filter was first verified to
   reject socket creation, then inherited by Node and Git:

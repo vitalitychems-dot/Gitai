@@ -221,6 +221,29 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
        FROM unnest($2::uuid[]) WITH ORDINALITY AS generated(id, ordinality)`,
       [bob, floodIds],
     );
+    const popularSeller = commons.subject("synthetic-popular-seller");
+    const crowdBuyers = Array.from({ length: 100 }, (_, i) => commons.subject(`synthetic-crowd-buyer-${i}`));
+    const crowdIds: string[] = Array.from({ length: 10000 }, () => randomUUID());
+    await pool.query(
+      `WITH generated AS (
+         SELECT id::text AS id, ordinality,
+           ($2::text[])[((ordinality - 1) % array_length($2::text[], 1) + 1)::int] AS buyer
+         FROM unnest($1::uuid[]) WITH ORDINALITY AS source(id, ordinality)
+       )
+       INSERT INTO gitai_records (id, kind, title, body, owner, status, data, created_at)
+       SELECT id, 'bid', 'Synthetic crowd agreement ' || ordinality::text,
+         'Synthetic private fixture only.', buyer, 'completed',
+         jsonb_build_object(
+           'participants', jsonb_build_array($3::text, buyer),
+           'scope', 'Synthetic private crowd scope ' || ordinality::text,
+           'events', jsonb_build_array(jsonb_build_object(
+             'id', id, 'action', 'deliver', 'actor', buyer, 'note', 'PRIVATE CROWD EVIDENCE ONLY'
+           ))
+         ),
+         '2015-01-01T00:00:00Z'::timestamptz + (ordinality * interval '1 millisecond')
+       FROM generated`,
+      [crowdIds, crowdBuyers, popularSeller],
+    );
     await pool.query("ANALYZE gitai_records");
     const indexes = await pool.query(
       "SELECT indexname FROM pg_indexes WHERE schemaname = current_schema() AND tablename = 'gitai_records'",
@@ -241,19 +264,49 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
       await planConnection.query("ROLLBACK");
       throw e;
     } finally { planConnection.release(); }
+    const plannerChosen = await pool.query(
+      "EXPLAIN (FORMAT JSON) SELECT id FROM gitai_records WHERE kind = 'bid' AND data @> $1::jsonb ORDER BY created_at DESC, id DESC LIMIT 51",
+      [JSON.stringify({ participants: [alice] })],
+    );
+    assert.match(JSON.stringify(plannerChosen.rows), /gitai_participant_lookup_gin_idx/);
+    const sellerPage = await commons.listPrivateWork(popularSeller, { limit: 50 });
+    assert.equal(sellerPage.records.length, 50);
+    assert.ok(sellerPage.nextCursor);
+    assert.ok(sellerPage.records.every(r =>
+      (r.data.participants as string[]).includes(popularSeller) && crowdIds.includes(r.id),
+    ));
+    const buyerPage = await commons.listPrivateWork(crowdBuyers[0], { limit: 100 });
+    assert.equal(buyerPage.records.length, 100);
+    assert.equal(buyerPage.nextCursor, null);
+    assert.ok(buyerPage.records.every(r =>
+      crowdIds.includes(r.id) && (r.data.participants as string[]).includes(crowdBuyers[0]),
+    ));
     assert.equal((await commons.listRecords("synthetic-outsider")).length, 1000);
     assert.equal((await commons.listRecords("synthetic-outsider")).some(r => historicalIds.includes(r.id)), false);
     assert.equal((await commons.listRecords(alice)).some(r => historicalIds.includes(r.id)), false);
     let cursor: string | undefined;
     const retrieved = new Map<string, Record<string, unknown>>();
+    const retrievedCount = new Map<string, number>();
     for (let page = 0; page < 30; page++) {
       const result = await commons.listPrivateWork(alice, { limit: 2, ...(cursor ? { cursor } : {}) });
-      for (const record of result.records) retrieved.set(record.id, record as unknown as Record<string, unknown>);
+      for (const record of result.records) {
+        retrieved.set(record.id, record as unknown as Record<string, unknown>);
+        retrievedCount.set(record.id, (retrievedCount.get(record.id) ?? 0) + 1);
+      }
       cursor = result.nextCursor ?? undefined;
       if (!cursor) break;
     }
     assert.ok(!cursor, "cursor pagination should exhaust the participant's small work history");
+    assert.deepEqual([...retrievedCount.values()].every(count => count === 1), true);
+    const expectedTarget = await commons.listPrivateWork(alice, { limit: 100 });
+    assert.equal(expectedTarget.nextCursor, null);
+    assert.deepEqual(
+      [...retrieved.keys()].sort(),
+      expectedTarget.records.map(record => record.id).sort(),
+      "paged work must exactly match this participant's complete history",
+    );
     assert.deepEqual(historicalIds.map(id => retrieved.has(id)), [true, true]);
+    assert.equal([...retrieved.keys()].some(id => crowdIds.includes(id)), false);
     assert.match(JSON.stringify(retrieved.get(historicalIds[0])?.data), /Private dispute evidence A/);
     assert.match(JSON.stringify(retrieved.get(historicalIds[1])?.data), /Private delivery evidence B/);
     assert.deepEqual((await commons.listPrivateWork(outsider, { limit: 2 })).records, []);
