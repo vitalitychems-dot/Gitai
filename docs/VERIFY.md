@@ -86,9 +86,10 @@ while anonymous and unrelated exports do not.
     Unapproved drafts did not export.
   - Conflicting origin/sequence, tampered checksums, unsafe bundle filenames and
     malformed bundles were rejected without publishing incoming content.
-- Marketplace navigation attention count unit test passed. Buyer consent/delivery,
-  seller consent/milestone deadlines, unrelated callers and signed-out identity
-  all use the same attention-item collector as the Marketplace page.
+- `pnpm run test` (also run at the start of the root build) executes five
+  Marketplace-attention tests: consent and expiry, buyer/seller/nonparticipant
+  visibility for every category, upcoming versus overdue seller deadlines,
+  delivery decisions and redelivery, and disputed work/resolution responses.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
   - Public community/repository/marketplace/people/fees/offline/settings routes
     render; no horizontal page overflow at those sizes.
