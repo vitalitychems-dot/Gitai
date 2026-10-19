@@ -38,11 +38,14 @@ export async function findRecord(id: string) {
 }
 export function canRead(row: CommonsRecordRow, actor: string) {
   return row.owner === actor ||
+    isParty(row, actor) ||
     (isOwner(actor) && ["report", "post", "comment", "service", "profile"].includes(row.kind)) ||
     (row.status === "approved" && !["invitation", "report", "block"].includes(row.kind) && row.data.visibility !== "private");
 }
 export async function listRecords(actor: string) {
-  const result = await db.select().from(records).where(isOwner(actor) ? undefined : actor ? or(eq(records.owner, actor), eq(records.status, "approved")) : eq(records.status, "approved")).orderBy(desc(records.createdAt)).limit(1000);
+  const result = await db.select().from(records).where(isOwner(actor) ? undefined : actor
+    ? or(eq(records.owner, actor), eq(records.status, "approved"), sql`${records.data}->'parties' ? ${actor}`)
+    : eq(records.status, "approved")).orderBy(desc(records.createdAt)).limit(1000);
   const blocked = new Set(result.filter(r => r.kind === "block" && r.owner === actor).map(r => r.data.subject));
   const index = new Map(result.map(r => [r.id, r]));
   const visibleParent = (r: CommonsRecordRow, depth = 0): boolean => {
@@ -57,6 +60,21 @@ export async function listRecords(actor: string) {
 // A DB transaction lock serializes operator quotas and all Git operations.
 async function locked<T>(fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {
   return db.transaction(async tx => { await tx.execute(sql`select pg_advisory_xact_lock(87148341)`); return fn(tx); });
+}
+export const withCommonsLock = locked;
+export type CommonsTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export async function assertRecordCapacity(tx: CommonsTx, actor: string, count = 1) {
+  const mine = await tx.select({ id: records.id }).from(records).where(eq(records.owner, actor));
+  if (mine.length + count > quotas.records) fail("Record quota reached (200). Withdrawn records remain in the audit quota.", 429);
+}
+export async function findRecordForUpdate(tx: CommonsTx, id: string) {
+  if (!z.uuid().safeParse(id).success) fail("Record not found.", 404);
+  const [r] = await tx.select().from(records).where(eq(records.id, id)).for("update");
+  if (!r) fail("Record not found.", 404);
+  return r;
+}
+export function isParty(row: CommonsRecordRow, actor: string) {
+  return Array.isArray(row.data.parties) && row.data.parties.includes(actor);
 }
 export async function createRecord(actor: string, input: unknown) {
   if (!actor) fail("Sign in to save a GitAI draft.", 401);
@@ -93,6 +111,7 @@ export async function changeRecord(actor: string, id: string, input: unknown) {
   return locked(async tx => {
     const r = await findRecord(id);
     if (r.owner !== actor && !isOwner(actor)) fail("Record not found.", 404);
+    if (["serviceBid", "serviceAgreement", "serviceReview"].includes(r.kind)) fail("Service records can only be changed through the consent workflow.", 409);
     let status = r.status;
     if (v.action === "approve") {
       if (!isOwner(actor)) fail("Only the explicitly configured community owner can approve publication.", 403);

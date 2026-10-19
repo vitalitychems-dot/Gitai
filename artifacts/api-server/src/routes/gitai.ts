@@ -5,6 +5,7 @@ import { db, commonsRecords } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { quoteFees } from "../lib/fees";
 import * as commons from "../lib/commons";
+import * as services from "../lib/service-workflows";
 
 const router = Router();
 const actor = (req: Request) => { const id = getAuth(req).userId; return id ? commons.subject(id) : ""; };
@@ -28,6 +29,16 @@ router.get("/gitai/state", handle(async req => {
   };
 }));
 router.post("/gitai/records", handle(req => commons.createRecord(actor(req), req.body), 201));
+router.post("/gitai/services/:serviceId/bids", handle(req =>
+  services.submitServiceBid(actor(req), String(req.params.serviceId), req.body), 201));
+router.post("/gitai/services/:serviceId/bids/:bidId/accept", handle(req =>
+  services.acceptServiceBid(actor(req), String(req.params.serviceId), String(req.params.bidId))));
+router.post("/gitai/bids/:id/withdraw", handle(req =>
+  services.withdrawServiceBid(actor(req), String(req.params.id))));
+router.post("/gitai/agreements/:id/actions", handle(req =>
+  services.actOnAgreement(actor(req), String(req.params.id), req.body)));
+router.post("/gitai/agreements/:id/reviews", handle(req =>
+  services.reviewServiceAgreement(actor(req), String(req.params.id), req.body), 201));
 router.patch("/gitai/records/:id", handle(req => commons.changeRecord(actor(req), String(req.params.id), req.body)));
 router.get("/gitai/repos/:id", handle(req => commons.repositoryDetail(actor(req), String(req.params.id))));
 router.post("/gitai/repos/:id/proposals", handle(req => commons.proposeChange(actor(req), String(req.params.id), req.body), 201));

@@ -30,7 +30,10 @@ import type {
   ProposalInput,
   RecordChange,
   RecordInput,
-  RepositoryDetail
+  RepositoryDetail,
+  ServiceAgreementAction,
+  ServiceBidInput,
+  ServiceReviewInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -752,6 +755,393 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getRequestRunMutationOptions(options));
+    }
+
+export const getSubmitServiceBidUrl = (serviceId: string,) => {
+
+
+
+
+  return `/api/gitai/services/${serviceId}/bids`
+}
+
+export const submitServiceBid = async (serviceId: string,
+    serviceBidInput: ServiceBidInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CommunityRecord>(getSubmitServiceBidUrl(serviceId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(serviceBidInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitServiceBidMutationKey = () => ['submitServiceBid'] as const;
+
+export const getSubmitServiceBidMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext> => {
+
+const mutationKey = getSubmitServiceBidMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitServiceBid>>, SubmitServiceBidMutationVariables> = (props) => {
+          const {serviceId,data} = props ?? {};
+
+          return  submitServiceBid(serviceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof submitServiceBid>>>
+    export type SubmitServiceBidMutationBody = BodyType<ServiceBidInput>
+    export type SubmitServiceBidMutationError = ErrorType<unknown>
+    export type SubmitServiceBidMutationVariables = {serviceId: string;data: BodyType<ServiceBidInput>}
+
+    export const useSubmitServiceBid = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitServiceBid>>,
+        TError,
+        SubmitServiceBidMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitServiceBidMutationOptions(options));
+    }
+
+export const getAcceptServiceBidUrl = (serviceId: string,
+    bidId: string,) => {
+
+
+
+
+  return `/api/gitai/services/${serviceId}/bids/${bidId}/accept`
+}
+
+export const acceptServiceBid = async (serviceId: string,
+    bidId: string, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+  return customFetch<CommunityRecord>(getAcceptServiceBidUrl(serviceId,bidId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getAcceptServiceBidMutationKey = () => ['acceptServiceBid'] as const;
+
+export const getAcceptServiceBidMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext> => {
+
+const mutationKey = getAcceptServiceBidMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptServiceBid>>, AcceptServiceBidMutationVariables> = (props) => {
+          const {serviceId,bidId} = props ?? {};
+
+          return  acceptServiceBid(serviceId,bidId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof acceptServiceBid>>>
+
+    export type AcceptServiceBidMutationError = ErrorType<unknown>
+    export type AcceptServiceBidMutationVariables = {serviceId: string;bidId: string}
+
+    export const useAcceptServiceBid = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptServiceBid>>,
+        TError,
+        AcceptServiceBidMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptServiceBidMutationOptions(options));
+    }
+
+export const getWithdrawServiceBidUrl = (id: string,) => {
+
+
+
+
+  return `/api/gitai/bids/${id}/withdraw`
+}
+
+export const withdrawServiceBid = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+  return customFetch<CommunityRecord>(getWithdrawServiceBidUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getWithdrawServiceBidMutationKey = () => ['withdrawServiceBid'] as const;
+
+export const getWithdrawServiceBidMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext> => {
+
+const mutationKey = getWithdrawServiceBidMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof withdrawServiceBid>>, WithdrawServiceBidMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  withdrawServiceBid(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type WithdrawServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof withdrawServiceBid>>>
+
+    export type WithdrawServiceBidMutationError = ErrorType<unknown>
+    export type WithdrawServiceBidMutationVariables = {id: string}
+
+    export const useWithdrawServiceBid = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof withdrawServiceBid>>,
+        TError,
+        WithdrawServiceBidMutationVariables,
+        TContext
+      > => {
+      return useMutation(getWithdrawServiceBidMutationOptions(options));
+    }
+
+export const getActOnServiceAgreementUrl = (id: string,) => {
+
+
+
+
+  return `/api/gitai/agreements/${id}/actions`
+}
+
+export const actOnServiceAgreement = async (id: string,
+    serviceAgreementAction: ServiceAgreementAction, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CommunityRecord>(getActOnServiceAgreementUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(serviceAgreementAction)
+  }
+);}
+
+
+
+
+
+export const getActOnServiceAgreementMutationKey = () => ['actOnServiceAgreement'] as const;
+
+export const getActOnServiceAgreementMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext> => {
+
+const mutationKey = getActOnServiceAgreementMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof actOnServiceAgreement>>, ActOnServiceAgreementMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  actOnServiceAgreement(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActOnServiceAgreementMutationResult = NonNullable<Awaited<ReturnType<typeof actOnServiceAgreement>>>
+    export type ActOnServiceAgreementMutationBody = BodyType<ServiceAgreementAction>
+    export type ActOnServiceAgreementMutationError = ErrorType<unknown>
+    export type ActOnServiceAgreementMutationVariables = {id: string;data: BodyType<ServiceAgreementAction>}
+
+    export const useActOnServiceAgreement = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof actOnServiceAgreement>>,
+        TError,
+        ActOnServiceAgreementMutationVariables,
+        TContext
+      > => {
+      return useMutation(getActOnServiceAgreementMutationOptions(options));
+    }
+
+export const getReviewServiceAgreementUrl = (id: string,) => {
+
+
+
+
+  return `/api/gitai/agreements/${id}/reviews`
+}
+
+export const reviewServiceAgreement = async (id: string,
+    serviceReviewInput: ServiceReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CommunityRecord>(getReviewServiceAgreementUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(serviceReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewServiceAgreementMutationKey = () => ['reviewServiceAgreement'] as const;
+
+export const getReviewServiceAgreementMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext> => {
+
+const mutationKey = getReviewServiceAgreementMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewServiceAgreement>>, ReviewServiceAgreementMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewServiceAgreement(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewServiceAgreementMutationResult = NonNullable<Awaited<ReturnType<typeof reviewServiceAgreement>>>
+    export type ReviewServiceAgreementMutationBody = BodyType<ServiceReviewInput>
+    export type ReviewServiceAgreementMutationError = ErrorType<unknown>
+    export type ReviewServiceAgreementMutationVariables = {id: string;data: BodyType<ServiceReviewInput>}
+
+    export const useReviewServiceAgreement = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewServiceAgreement>>,
+        TError,
+        ReviewServiceAgreementMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReviewServiceAgreementMutationOptions(options));
     }
 
 export const getHealthCheckUrl = () => {

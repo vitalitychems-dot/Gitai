@@ -152,6 +152,103 @@ export interface FeeQuote {
   settlement: string;
 }
 
+export interface ServiceMilestoneInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  title: string;
+  /** @maxLength 2000 */
+  detail: string;
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  amountMinor: number;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  deadlineOffsetDays: number;
+}
+
+export interface ServiceBidInput {
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  subtotalMinor: number;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  deadlineDays: number;
+  /**
+     * @minLength 10
+     * @maxLength 3000
+     */
+  scope: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  milestones: ServiceMilestoneInput[];
+}
+
+export type ServiceAgreementActionAction = typeof ServiceAgreementActionAction[keyof typeof ServiceAgreementActionAction];
+
+
+export const ServiceAgreementActionAction = {
+  accept: 'accept',
+  cancel: 'cancel',
+  deliver: 'deliver',
+  accept_milestone: 'accept_milestone',
+  request_revision: 'request_revision',
+  open_dispute: 'open_dispute',
+  add_dispute_evidence: 'add_dispute_evidence',
+  propose_resolution: 'propose_resolution',
+  accept_resolution: 'accept_resolution',
+} as const;
+
+export type ServiceAgreementActionOutcome = typeof ServiceAgreementActionOutcome[keyof typeof ServiceAgreementActionOutcome];
+
+
+export const ServiceAgreementActionOutcome = {
+  accept_delivery: 'accept_delivery',
+  revise: 'revise',
+  cancel_agreement: 'cancel_agreement',
+} as const;
+
+export interface ServiceAgreementAction {
+  action: ServiceAgreementActionAction;
+  milestoneId?: string;
+  disputeId?: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  deliveryText?: string;
+  /**
+     * @minLength 10
+     * @maxLength 2000
+     */
+  reason?: string;
+  outcome?: ServiceAgreementActionOutcome;
+}
+
+export interface ServiceReviewInput {
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  /**
+     * @minLength 30
+     * @maxLength 2000
+     */
+  body: string;
+}
+
 export interface DataExport {
   version: string;
   records: CommunityRecord[];

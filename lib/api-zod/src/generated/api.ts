@@ -221,6 +221,146 @@ export const ExportMyDataResponse = zod.object({
 export const RequestRunResponse = zod.void()
 
 
+export const SubmitServiceBidParams = zod.object({
+  "serviceId": zod.coerce.string().uuid()
+})
+
+export const submitServiceBidBodySubtotalMinorMax = 100000000;
+
+export const submitServiceBidBodyDeadlineDaysMax = 365;
+
+export const submitServiceBidBodyScopeMin = 10;
+export const submitServiceBidBodyScopeMax = 3000;
+
+export const submitServiceBidBodyMilestonesItemTitleMax = 80;
+
+export const submitServiceBidBodyMilestonesItemDetailMax = 2000;
+
+export const submitServiceBidBodyMilestonesItemAmountMinorMax = 100000000;
+
+export const submitServiceBidBodyMilestonesItemDeadlineOffsetDaysMax = 365;
+
+export const submitServiceBidBodyMilestonesMax = 10;
+
+
+
+export const SubmitServiceBidBody = zod.object({
+  "subtotalMinor": zod.number().int().min(1).max(submitServiceBidBodySubtotalMinorMax),
+  "deadlineDays": zod.number().int().min(1).max(submitServiceBidBodyDeadlineDaysMax),
+  "scope": zod.string().min(submitServiceBidBodyScopeMin).max(submitServiceBidBodyScopeMax),
+  "milestones": zod.array(zod.object({
+  "title": zod.string().min(1).max(submitServiceBidBodyMilestonesItemTitleMax),
+  "detail": zod.string().max(submitServiceBidBodyMilestonesItemDetailMax),
+  "amountMinor": zod.number().int().min(1).max(submitServiceBidBodyMilestonesItemAmountMinorMax),
+  "deadlineOffsetDays": zod.number().int().min(1).max(submitServiceBidBodyMilestonesItemDeadlineOffsetDaysMax)
+})).min(1).max(submitServiceBidBodyMilestonesMax)
+})
+
+export const SubmitServiceBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const AcceptServiceBidParams = zod.object({
+  "serviceId": zod.coerce.string().uuid(),
+  "bidId": zod.coerce.string().uuid()
+})
+
+export const AcceptServiceBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const WithdrawServiceBidParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const WithdrawServiceBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ActOnServiceAgreementParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const actOnServiceAgreementBodyDeliveryTextMax = 10000;
+
+export const actOnServiceAgreementBodyReasonMin = 10;
+export const actOnServiceAgreementBodyReasonMax = 2000;
+
+
+
+export const ActOnServiceAgreementBody = zod.object({
+  "action": zod.enum(['accept', 'cancel', 'deliver', 'accept_milestone', 'request_revision', 'open_dispute', 'add_dispute_evidence', 'propose_resolution', 'accept_resolution']),
+  "milestoneId": zod.string().uuid().optional(),
+  "disputeId": zod.string().uuid().optional(),
+  "deliveryText": zod.string().min(1).max(actOnServiceAgreementBodyDeliveryTextMax).optional(),
+  "reason": zod.string().min(actOnServiceAgreementBodyReasonMin).max(actOnServiceAgreementBodyReasonMax).optional(),
+  "outcome": zod.enum(['accept_delivery', 'revise', 'cancel_agreement']).optional()
+})
+
+export const ActOnServiceAgreementResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ReviewServiceAgreementParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const reviewServiceAgreementBodyRatingMax = 5;
+
+export const reviewServiceAgreementBodyBodyMin = 30;
+export const reviewServiceAgreementBodyBodyMax = 2000;
+
+
+
+export const ReviewServiceAgreementBody = zod.object({
+  "rating": zod.number().int().min(1).max(reviewServiceAgreementBodyRatingMax),
+  "body": zod.string().min(reviewServiceAgreementBodyBodyMin).max(reviewServiceAgreementBodyBodyMax)
+})
+
+export const ReviewServiceAgreementResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 /**
  * Returns server health status
  * @summary Health check
