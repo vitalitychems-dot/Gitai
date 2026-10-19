@@ -80,6 +80,22 @@ function decodeWorkCursor(cursor: string) {
 function encodeWorkCursor(createdAt: string, id: string) {
   return Buffer.from(JSON.stringify({ createdAt, id })).toString("base64url");
 }
+const exportCursorPayload = z.object({
+  version: z.literal(1),
+  snapshotAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  id: z.uuid(),
+}).strict();
+function decodeExportCursor(cursor: string) {
+  try {
+    const bytes = Buffer.from(cursor, "base64url");
+    if (bytes.length > 256 || bytes.toString("base64url") !== cursor) fail("Invalid export cursor.");
+    return exportCursorPayload.parse(JSON.parse(bytes.toString("utf8")));
+  } catch { fail("Invalid export cursor."); }
+}
+function encodeExportCursor(snapshotAt: string, createdAt: string, id: string) {
+  return Buffer.from(JSON.stringify({ version: 1, snapshotAt, createdAt, id })).toString("base64url");
+}
 export async function listPrivateWork(actor: string, options: unknown = {}) {
   if (!actor) fail("Sign in to view private agreements.", 401);
   const query = workPageQuery.parse(options);
@@ -113,16 +129,47 @@ export async function listPrivateWork(actor: string, options: unknown = {}) {
       : null,
   };
 }
-export async function exportPersonalRecords(actor: string) {
+export async function exportPersonalRecords(actor: string, options: unknown = {}) {
   if (!actor) fail("Sign in to export your own data.", 401);
+  const query = workPageQuery.parse(options);
+  const cursor = query.cursor ? decodeExportCursor(query.cursor) : undefined;
   const agreements = and(
     eq(records.kind, "bid"),
     sql`${records.data} @> ${JSON.stringify({ participants: [actor] })}::jsonb`,
   );
-  const owned = await db.select().from(records)
-    .where(or(eq(records.owner, actor), agreements))
-    .orderBy(desc(records.createdAt), desc(records.id));
-  return owned.map(serial);
+  const conditions = [or(eq(records.owner, actor), agreements)!];
+  if (cursor) {
+    conditions.push(or(
+      sql`${records.createdAt} < ${cursor.createdAt}::timestamptz`,
+      and(sql`${records.createdAt} = ${cursor.createdAt}::timestamptz`, lt(records.id, cursor.id)),
+    )!);
+  }
+  // A fixed snapshot timestamp keeps records created during a multi-page download
+  // from moving its boundary or appearing unpredictably on later pages.
+  conditions.push(cursor
+    ? sql`${records.createdAt} <= ${cursor.snapshotAt}::timestamptz`
+    : sql`${records.createdAt} <= statement_timestamp()`);
+  const fetched = await db.select({
+    record: records,
+    cursorTimestamp: sql<string>`to_char(${records.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+    snapshotTimestamp: cursor
+      ? sql<string>`to_char(${cursor.snapshotAt}::timestamptz AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`
+      : sql<string>`to_char(statement_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+  }).from(records).where(and(...conditions))
+    .orderBy(desc(records.createdAt), desc(records.id)).limit(query.limit + 1);
+  const more = fetched.length > query.limit;
+  const page = fetched.slice(0, query.limit);
+  const last = page.at(-1);
+  const snapshotAt = page[0]?.snapshotTimestamp ?? cursor?.snapshotAt ?? null;
+  return {
+    records: page.map(item => serial(item.record)),
+    limit: query.limit,
+    snapshotAt,
+    complete: !more,
+    nextCursor: more && last
+      ? encodeExportCursor(last.snapshotTimestamp, last.cursorTimestamp, last.record.id)
+      : null,
+  };
 }
 // A DB transaction lock serializes operator quotas and all Git operations.
 async function locked<T>(fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {

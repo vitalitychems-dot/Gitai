@@ -10,4 +10,10 @@ import type { CommunityRecord } from './communityRecord';
 export interface DataExport {
   version: string;
   records: CommunityRecord[];
+  limit: number;
+  /** @nullable */
+  snapshotAt: Date | null;
+  complete: boolean;
+  /** @nullable */
+  nextCursor: string | null;
 }

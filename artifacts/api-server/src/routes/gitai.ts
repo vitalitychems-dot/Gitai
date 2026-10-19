@@ -53,10 +53,14 @@ router.post("/gitai/fees", handle(req => {
   const v = QuoteFeesBody.parse(req.body);
   return quoteFees(v.subtotalMinor, v.refundMinor);
 }));
-router.get("/gitai/export", handle(async req => {
-  const who = actor(req);
-  return { version: "gitai-data-v1", records: await commons.exportPersonalRecords(who) };
-}));
+router.get("/gitai/export", async (req, res, next) => {
+  try {
+    const who = actor(req);
+    const page = await commons.exportPersonalRecords(who, req.query);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ version: "gitai-data-v1", ...page });
+  } catch (error) { next(error); }
+});
 router.post("/gitai/runner/jobs", (_req, res) => {
   res.status(503).json({ error: "Runner unavailable. Requires an independently isolated ephemeral VM service, default-deny network, tenant-separated storage and a verified broker. No job was executed.", state: "unavailable" });
 });

@@ -17,6 +17,7 @@ export * from './commonsQuotas';
 export * from './communityRecord';
 export * from './communityRecordData';
 export * from './dataExport';
+export * from './exportMyDataParams';
 export * from './feeInput';
 export * from './feeQuote';
 export * from './getMyWorkParams';

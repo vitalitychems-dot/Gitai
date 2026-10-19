@@ -375,6 +375,12 @@ export interface ServiceReviewInput {
 export interface DataExport {
   version: string;
   records: CommunityRecord[];
+  limit: number;
+  /** @nullable */
+  snapshotAt: string | null;
+  complete: boolean;
+  /** @nullable */
+  nextCursor: string | null;
 }
 
 export interface HealthStatus {
@@ -382,6 +388,18 @@ export interface HealthStatus {
 }
 
 export type GetMyWorkParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @maxLength 256
+ */
+cursor?: string;
+};
+
+export type ExportMyDataParams = {
 /**
  * @minimum 1
  * @maximum 100

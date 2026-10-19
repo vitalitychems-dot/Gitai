@@ -322,6 +322,18 @@ export const QuoteFeesResponse = zod.object({
 })
 
 
+export const exportMyDataQueryLimitDefault = 50;
+export const exportMyDataQueryLimitMax = 100;
+
+export const exportMyDataQueryCursorMax = 256;
+
+
+
+export const ExportMyDataQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(exportMyDataQueryLimitMax).default(exportMyDataQueryLimitDefault),
+  "cursor": zod.coerce.string().max(exportMyDataQueryCursorMax).optional()
+})
+
 export const ExportMyDataResponse = zod.object({
   "version": zod.string(),
   "records": zod.array(zod.object({
@@ -333,7 +345,11 @@ export const ExportMyDataResponse = zod.object({
   "status": zod.string(),
   "createdAt": zod.string(),
   "data": zod.record(zod.string(), zod.unknown())
-}))
+})),
+  "limit": zod.number().int(),
+  "snapshotAt": zod.coerce.date().nullable(),
+  "complete": zod.boolean(),
+  "nextCursor": zod.string().nullable()
 })
 
 

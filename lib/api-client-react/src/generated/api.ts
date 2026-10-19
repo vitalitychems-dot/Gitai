@@ -25,6 +25,7 @@ import type {
   Commons,
   CommunityRecord,
   DataExport,
+  ExportMyDataParams,
   FeeInput,
   FeeQuote,
   GetMyWorkParams,
@@ -866,17 +867,24 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       return useMutation(getQuoteFeesMutationOptions(options));
     }
 
-export const getExportMyDataUrl = () => {
+export const getExportMyDataUrl = (params?: ExportMyDataParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/gitai/export`
+  return stringifiedParams.length > 0 ? `/api/gitai/export?${stringifiedParams}` : `/api/gitai/export`
 }
 
-export const exportMyData = async ( options?: Parameters<typeof customFetch>[1]): Promise<DataExport> => {
+export const exportMyData = async (params?: ExportMyDataParams, options?: Parameters<typeof customFetch>[1]): Promise<DataExport> => {
 
-  return customFetch<DataExport>(getExportMyDataUrl(),
+  return customFetch<DataExport>(getExportMyDataUrl(params),
   {
     ...options,
     method: 'GET'
@@ -889,23 +897,23 @@ export const exportMyData = async ( options?: Parameters<typeof customFetch>[1])
 
 
 
-export const getExportMyDataQueryKey = () => {
+export const getExportMyDataQueryKey = (params?: ExportMyDataParams,) => {
     return [
-    `/api/gitai/export`
+    `/api/gitai/export`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getExportMyDataQueryOptions = <TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getExportMyDataQueryOptions = <TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<void>>(params?: ExportMyDataParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getExportMyDataQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getExportMyDataQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportMyData>>> = ({ signal }) => exportMyData({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportMyData>>> = ({ signal }) => exportMyData(params, { signal, ...requestOptions });
 
 
 
@@ -915,16 +923,16 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type ExportMyDataQueryResult = NonNullable<Awaited<ReturnType<typeof exportMyData>>>
-export type ExportMyDataQueryError = ErrorType<unknown>
+export type ExportMyDataQueryError = ErrorType<void>
 
 
 
-export function useExportMyData<TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export function useExportMyData<TData = Awaited<ReturnType<typeof exportMyData>>, TError = ErrorType<void>>(
+ params?: ExportMyDataParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof exportMyData>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getExportMyDataQueryOptions(options)
+  const queryOptions = getExportMyDataQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

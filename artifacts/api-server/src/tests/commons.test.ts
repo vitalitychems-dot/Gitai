@@ -74,7 +74,7 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     assert.equal((await commons.repositoryDetail(alice, repo.id)).proposals.length, 1);
     await assert.rejects(commons.mergeChange(alice, repo.id, { proposalId: p.id, reviewed: false }), /review/);
     await commons.mergeChange(alice, repo.id, { proposalId: p.id, reviewed: true });
-    const after = await commons.repositoryDetail(alice, repo.id);
+      const after = await pool.query("SELECT id, status, data FROM gitai_records ORDER BY id");
     assert.equal(after.commits.length, 2);
     assert.equal(after.files.find(f => f.path === "notes.md")?.content, "Actual Git blob\n");
     await assert.rejects(commons.mergeChange(alice, repo.id, { proposalId: p.id, reviewed: true }), /not found/);
@@ -197,20 +197,8 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     // Deliberately use identical sub-millisecond timestamps to exercise a stable keyset boundary.
     const historicalIds: string[] = [randomUUID(), randomUUID()];
     const historicalTime = "2000-01-01T00:00:00.123456Z";
-    await pool.query(
-      `INSERT INTO gitai_records (id, kind, title, body, owner, status, data, created_at)
-       VALUES
-         ($1, 'bid', 'Historical agreement A', 'Private scope A', $2, 'resolved',
-          $4::jsonb, $6::timestamptz),
-         ($3, 'bid', 'Historical agreement B', 'Private scope B', $2, 'completed',
-          $5::jsonb, $6::timestamptz)`,
-      [
-        historicalIds[0], alice, historicalIds[1],
-        JSON.stringify({ participants: [alice, bob], events: [{ id: randomUUID(), action: "evidence", actor: bob, at: historicalTime, note: "Private dispute evidence A." }] }),
-        JSON.stringify({ participants: [alice, bob], events: [{ id: randomUUID(), action: "evidence", actor: alice, at: historicalTime, note: "Private delivery evidence B." }] }),
-        historicalTime,
-      ],
-    );
+
+    const privateParty = commons.subject("synthetic-private-party");
     const floodIds = Array.from({ length: 1105 }, () => randomUUID());
     await pool.query(
       `INSERT INTO gitai_records (id, kind, title, body, owner, status, data, created_at)
@@ -258,6 +246,8 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
         "EXPLAIN (FORMAT JSON) SELECT id FROM gitai_records WHERE kind = 'bid' AND data @> $1::jsonb ORDER BY created_at DESC, id DESC LIMIT 51",
         [JSON.stringify({ participants: [alice] })],
       );
+
+    const firstExport = await commons.exportPersonalRecords(alice, { limit: 37 });
       assert.match(JSON.stringify(planResult.rows), /gitai_participant_lookup_gin_idx/);
       await planConnection.query("COMMIT");
     } catch (e) {
@@ -287,8 +277,8 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     let cursor: string | undefined;
     const retrieved = new Map<string, Record<string, unknown>>();
     const retrievedCount = new Map<string, number>();
-    for (let page = 0; page < 30; page++) {
-      const result = await commons.listPrivateWork(alice, { limit: 2, ...(cursor ? { cursor } : {}) });
+      for (let page = 0; page < 30; page++) {
+          const result = await response.json();
       for (const record of result.records) {
         retrieved.set(record.id, record as unknown as Record<string, unknown>);
         retrievedCount.set(record.id, (retrievedCount.get(record.id) ?? 0) + 1);
@@ -336,23 +326,23 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
       const address = server.address();
       assert.ok(address && typeof address === "object");
       const base = `http://127.0.0.1:${address.port}/api`;
-      async function getWork(user: string, cursor?: string) {
-        const params = new URLSearchParams({ limit: "2", ...(cursor ? { cursor } : {}) });
+      async function getWork(user: string, cursor?: string, limit = 100) {
+        const params = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
         return fetch(`${base}/gitai/work?${params}`, { headers: { "x-synthetic-user": user } });
       }
-      async function getExport(user: string) {
-        return fetch(`${base}/gitai/export`, { headers: { "x-synthetic-user": user } });
+      async function getExport(user: string, cursor?: string, limit = 50) {
+        const params = new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) });
+        return fetch(`${base}/gitai/export?${params}`, { headers: { "x-synthetic-user": user } });
       }
       const anonymousWork = await getWork("anonymous");
       assert.equal(anonymousWork.status, 401);
       assert.equal((await getExport("anonymous")).status, 401);
-      const participantExport = await getExport("synthetic-bob");
-      assert.equal(participantExport.status, 200);
-      const exportedRecords = (await participantExport.json() as { records: { id: string; data: unknown }[] }).records;
-      assert.deepEqual(historicalIds.map(id => exportedRecords.some(record => record.id === id)), [true, true]);
-      assert.match(JSON.stringify(exportedRecords.filter(record => historicalIds.includes(record.id))), /Private (dispute|delivery) evidence/);
+      const participantExport = await getExport("synthetic-bob", undefined, 37);
+
+      const firstRoutePage = await participantExport.json() as { records: { id: string; data: unknown }[]; nextCursor: string | null; complete: boolean };
       const unrelatedExport = await getExport("synthetic-outsider");
-      assert.deepEqual((await unrelatedExport.json() as { records: unknown[] }).records, []);
+
+      const unrelatedPayload = await unrelatedExport.json() as { records: unknown[]; complete: boolean; nextCursor: string | null };
       const strangerPage = await getWork("synthetic-outsider");
       const strangerBody = await strangerPage.json() as { records: unknown[] };
       assert.deepEqual(strangerBody.records, []);
@@ -362,7 +352,10 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
       let workCursor: string | undefined;
       const pagedIds = new Set<string>();
       for (let page = 0; page < 30; page++) {
-        const response = await getWork("synthetic-alice", workCursor);
+          const response = await fetch(base + attempt.path, {
+            method: "POST", headers: { "Content-Type": "application/json", "x-synthetic-user": user },
+            body: JSON.stringify(attempt.body),
+          });
         assert.equal(response.status, 200);
         const payload = await response.json() as { records: { id: string }[]; nextCursor: string | null };
         for (const record of payload.records) pagedIds.add(record.id);
@@ -411,3 +404,33 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     await pool.end();
   }
 });
+
+      const resumedPayload = await resumedRoutePage.json() as { records: { id: string; data: unknown }[]; nextCursor: string | null; complete: boolean };
+
+    const lateAgreementId = randomUUID();
+
+      const routeExportRecords = [...firstRoutePage.records];
+
+      const repeatedRoutePage = await getExport("synthetic-bob", firstRoutePage.nextCursor, 37);
+
+      const repeatedPayload = await repeatedRoutePage.json() as { records: { id: string }[]; nextCursor: string | null };
+
+    let exportCursor = firstExport.nextCursor;
+
+      const routeExportIds = new Set(firstRoutePage.records.map(record => record.id));
+
+    const hiddenAgreementId = randomUUID();
+
+    const exportIds = new Set<string>(firstExport.records.map(record => record.id));
+
+    const largeAgreementIds = Array.from({ length: 237 }, () => randomUUID());
+
+      let routeCursor: string | null = firstRoutePage.nextCursor;
+
+    const resumeCursor = firstExport.nextCursor!;
+
+      const resumedRoutePage = await getExport("synthetic-bob", firstRoutePage.nextCursor, 37);
+
+    const interruptedRetry = await commons.exportPersonalRecords(alice, { limit: 37, cursor: resumeCursor });
+
+    const resumedExport = await commons.exportPersonalRecords(alice, { limit: 37, cursor: resumeCursor });

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useUser } from '@clerk/react';
-import { useExportMyData, getExportMyDataQueryKey } from '@workspace/api-client-react';
+import { exportMyData } from '@workspace/api-client-react';
+import type { DataExport } from '@workspace/api-client-react';
 import { Button } from '@/components/ui/button';
 import { Download, MailPlus, ShieldAlert } from 'lucide-react';
 import { useCommons, useCreate, useRecords } from '@/hooks/use-commons';
@@ -33,22 +34,71 @@ function Account() {
 
 function Export() {
   const { toast } = useToast();
-  const exp = useExportMyData({ query: { enabled: false, queryKey: getExportMyDataQueryKey() } });
+  const [exporting, setExporting] = useState(false);
+  const [canResume, setCanResume] = useState(false);
+  const progress = useRef<{
+    cursor?: string;
+    version?: string;
+    snapshotAt?: string | null;
+    records: DataExport['records'];
+    seenCursors: Set<string>;
+  } | null>(null);
   const go = async () => {
-    const r = await exp.refetch();
-    if (r.error || !r.data) { toast({ title: 'Export failed', description: errMsg(r.error), variant: 'destructive' }); return; }
-    const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `gitai-export-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    toast({ title: `Exported ${r.data.records.length} records` });
+    setExporting(true);
+    const current = progress.current ?? { records: [], seenCursors: new Set<string>() };
+    progress.current = current;
+    try {
+      while (true) {
+        const params = { limit: 100, ...(current.cursor ? { cursor: current.cursor } : {}) };
+        let page: DataExport;
+        try {
+          page = await exportMyData(params);
+        } catch {
+          // The current cursor stays unchanged, so retrying a failed page cannot
+          // skip records or shift the fixed export snapshot.
+          page = await exportMyData(params);
+        }
+        if (current.version === undefined) {
+          current.version = page.version;
+          current.snapshotAt = page.snapshotAt;
+        } else if (current.version !== page.version || current.snapshotAt !== page.snapshotAt) {
+          throw new Error('The export changed between pages. Please start the download again.');
+        }
+        if (page.complete && page.nextCursor !== null) {
+          throw new Error('The export response was incomplete. Please try again.');
+        }
+        if (!page.complete && (!page.nextCursor || current.seenCursors.has(page.nextCursor))) {
+          throw new Error('The export could not continue safely. Please try again.');
+        }
+        current.records.push(...page.records);
+        if (page.complete) {
+          break;
+        }
+        current.seenCursors.add(page.nextCursor!);
+        current.cursor = page.nextCursor!;
+      }
+      const blob = new Blob([JSON.stringify({ version: current.version, records: current.records }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gitai-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      const count = current.records.length;
+      progress.current = null;
+      setCanResume(false);
+      toast({ title: `Exported ${count} records` });
+    } catch (error) {
+      setCanResume(current.records.length > 0 || !!current.cursor);
+      toast({ title: 'Export failed', description: errMsg(error), variant: 'destructive' });
+    } finally {
+      setExporting(false);
+    }
   };
   return (
     <div className="rounded-2xl border bg-card p-5">
-      <p className="text-sm text-muted-foreground">Download every record you own as JSON, including drafts and withdrawn items.</p>
-      <Button className="mt-4" variant="outline" onClick={go} disabled={exp.isFetching} data-testid="button-export"><Download className="mr-1.5 h-4 w-4" />{exp.isFetching ? 'Preparing' : 'Export my data'}</Button>
+      <p className="text-sm text-muted-foreground">Download every record you own and every agreement you’re part of as JSON, including drafts and withdrawn items.</p>
+      <Button className="mt-4" variant="outline" onClick={go} disabled={exporting} data-testid="button-export"><Download className="mr-1.5 h-4 w-4" />{exporting ? 'Preparing' : canResume ? 'Resume export' : 'Export my data'}</Button>
     </div>
   );
 }
