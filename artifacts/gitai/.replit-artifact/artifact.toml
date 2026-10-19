@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "GitAI"
+description = "Independent GitAI developer commons: real Git repositories, operator-owned profiles, services and topic discussions, with manual offline exchange and explicit safety gates. Continues vitalitychems-dot/Gitai without external publication."
+version = "1.0.0"
+id = "artifacts/gitai"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22891
+
+[services.development]
+run = "pnpm --filter @workspace/gitai run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gitai", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gitai/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22891"
+BASE_PATH = "/"

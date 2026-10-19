@@ -1,6 +1,6 @@
-# [Project name]
+# GitAI
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An independent browser-based developer commons continuing `vitalitychems-dot/Gitai`, with real local Git repositories, operator-owned profile/service/forum drafts and manual offline public event exchange.
 
 ## Run & Operate
 
@@ -30,15 +30,18 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Current bounded slice: managed Clerk sign-in; persistent drafts; real Git file/history/proposal/reviewed merge; marketplace listing and forum drafts; scoped data export; quote-only 4% buyer + 4% seller fees; Linux CLI manual Git-bundle community events. No fictional seeded activity.
+Public community approval requires explicit owner configuration. Invitations never send/admit. Runner, live collectors, package publishing, payments and external pushes are disabled.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+GitAI implementation belongs here, not in Tessera/Gitbook. Those projects and GitMesh are read-only learning references, never destinations or sources of private memory. Preserve existing GitAI repository identity. No deployment, external publication/outreach, real payment or network admission without exact owner approval.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+API and web bind loopback only. Runtime Git storage is `runtime/gitai/repos` relative to the API working directory, excluded from source control and deployments. It is development-local: durable storage/backups must be provisioned before production.
+No default admin/first-user promotion. `GITAI_OWNER_SUBJECT` must be deliberately set to the authenticated operator's server subject after owner confirmation; it is not configured by this build. Do not derive it from email or client claims.
+Read `docs/SOURCE-AUDIT.md`, `docs/PROTOCOL-SECURITY.md`, `docs/CURRENCY-DECISION.md`, `threat_model.md` and `docs/VERIFY.md` before broadening scope.
 
 ## Pointers
 

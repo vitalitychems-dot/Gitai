@@ -1,0 +1,2 @@
+- [Fee policy intent](gitai-boundaries.md) — historical wallet/staking code does not authorize extra fees; escrow wording remains undecided.
+- [Browser test environment](browser-test-environment.md) — downloaded Playwright Chromium lacks Nix shared libraries; use system Chromium for trusted app tests.

@@ -15,11 +15,9 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
+const server = app.listen(port, "127.0.0.1", () => {
   logger.info({ port }, "Server listening");
 });
+server.requestTimeout = 15000;
+server.headersTimeout = 10000;
+server.on("error", () => { logger.error("Server failed to listen"); process.exit(1); });

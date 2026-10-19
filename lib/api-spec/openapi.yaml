@@ -11,6 +11,117 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /gitai/state:
+    get:
+      operationId: getCommons
+      responses:
+        "200":
+          description: Public approved records and the authenticated operator's drafts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Commons" }
+  /gitai/records:
+    post:
+      operationId: createRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordInput" }
+      responses:
+        "201":
+          description: Persisted record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/records/{id}:
+    patch:
+      operationId: changeRecord
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordChange" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/repos/{id}:
+    get:
+      operationId: getRepository
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Real Git objects; never executed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryDetail" }
+  /gitai/repos/{id}/proposals:
+    post:
+      operationId: proposeChange
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProposalInput" }
+      responses:
+        "201":
+          description: Proposed commit on a review branch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/repos/{id}/merge:
+    post:
+      operationId: mergeChange
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MergeInput" }
+      responses:
+        "200":
+          description: Reviewed fast-forward merge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/fees:
+    post:
+      operationId: quoteFees
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeInput" }
+      responses:
+        "200":
+          description: Immutable calculation, not a charge or settlement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeQuote" }
+  /gitai/export:
+    get:
+      operationId: exportMyData
+      responses:
+        "200":
+          description: Authenticated operator data
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+  /gitai/runner/jobs:
+    post:
+      operationId: requestRun
+      responses:
+        "503":
+          description: Fail closed; isolated runner has not been provisioned
   /healthz:
     get:
       operationId: healthCheck
@@ -26,6 +137,136 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    CommunityRecord:
+      type: object
+      required: [id, kind, title, body, owner, status, createdAt, data]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        title: { type: string }
+        body: { type: string }
+        owner: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        data: { type: object, additionalProperties: true }
+    RecordInput:
+      type: object
+      required: [kind, title, body, data]
+      properties:
+        kind: { type: string, enum: [profile, repository, service, post, comment, issue, invitation, report, block] }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, maxLength: 10000 }
+        data: { type: object, additionalProperties: true }
+    RecordChange:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, revoke, delete, edit, accept] }
+        title: { type: string }
+        body: { type: string }
+    Commons:
+      type: object
+      required: [records, authenticated, capabilities, source, quotas, observedAt]
+      properties:
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+        authenticated: { type: boolean }
+        isOwner: { type: boolean }
+        subject: { type: string }
+        observedAt: { type: string }
+        source: { type: string }
+        quotas:
+          type: object
+          required: [repositories, records, fileBytes, repositoryBytes]
+          properties:
+            repositories: { type: integer }
+            records: { type: integer }
+            fileBytes: { type: integer }
+            repositoryBytes: { type: integer }
+        capabilities:
+          type: object
+          required: [runner, payments, gateway, admission, offline]
+          properties:
+            runner: { type: string }
+            payments: { type: string }
+            gateway: { type: string }
+            admission: { type: string }
+            offline: { type: string }
+    RepositoryDetail:
+      type: object
+      required: [repository, files, commits, proposals, head]
+      properties:
+        repository: { $ref: "#/components/schemas/CommunityRecord" }
+        head: { type: string }
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepoFile"
+        commits:
+          type: array
+          items: { $ref: "#/components/schemas/GitCommit" }
+        proposals:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+    RepoFile:
+      type: object
+      required: [path, content]
+      properties:
+        path: { type: string }
+        content: { type: string }
+    GitCommit:
+      type: object
+      required: [oid, message, time]
+      properties:
+        oid: { type: string }
+        message: { type: string }
+        time: { type: string }
+    ProposalInput:
+      type: object
+      required: [base, path, content, message]
+      properties:
+        base: { type: string }
+        path: { type: string }
+        content: { type: string, maxLength: 65536 }
+        message: { type: string, minLength: 1, maxLength: 200 }
+    MergeInput:
+      type: object
+      required: [proposalId, reviewed]
+      properties:
+        proposalId: { type: string }
+        reviewed: { type: boolean }
+    FeeInput:
+      type: object
+      required: [subtotalMinor]
+      properties:
+        subtotalMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        refundMinor: { type: integer, minimum: 0 }
+    FeeQuote:
+      type: object
+      required: [id, version, currency, subtotalMinor, buyerFeeMinor, sellerFeeMinor, buyerTotalMinor, sellerNetMinor, platformGrossMinor, refundBuyerMinor, refundSellerMinor, refundPlatformMinor, settlement]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        currency: { type: string }
+        subtotalMinor: { type: integer }
+        buyerFeeMinor: { type: integer }
+        sellerFeeMinor: { type: integer }
+        buyerTotalMinor: { type: integer }
+        sellerNetMinor: { type: integer }
+        platformGrossMinor: { type: integer }
+        refundBuyerMinor: { type: integer }
+        refundSellerMinor: { type: integer }
+        refundPlatformMinor: { type: integer }
+        settlement: { type: string }
+    DataExport:
+      type: object
+      required: [version, records]
+      properties:
+        version: { type: string }
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
     HealthStatus:
       type: object
       properties:
