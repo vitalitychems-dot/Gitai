@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useAuth, useClerk, useUser } from '@clerk/react';
-import { useHealthCheck, getHealthCheckQueryKey } from '@workspace/api-client-react';
+import { useHealthCheck, getHealthCheckQueryKey, useGetMyWork, getGetMyWorkQueryKey } from '@workspace/api-client-react';
 import { BookOpen, Calculator, FolderGit2, HardDriveDownload, LogOut, Menu, MessagesSquare, Settings, Store, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { basePath } from '@/lib/commons';
 import { useCommons } from '@/hooks/use-commons';
+import { parseBid } from '@/lib/bids';
+import { countMarketplaceAttention } from '@/lib/marketplace-attention';
 
 const primary = [
   { href: '/', label: 'Community', icon: MessagesSquare },
@@ -30,15 +32,56 @@ function Mark() {
 
 function NavList({ onNav }: { onNav?: () => void }) {
   const [loc] = useLocation();
-  const active = (h: string) => (h === '/' ? loc === '/' : loc.startsWith(h));
-  const item = (n: (typeof primary)[number]) => (
-    <Link key={n.href} href={n.href} onClick={onNav} data-testid={`link-nav-${n.label.toLowerCase().replace(/\s/g, '-')}`}
-      className={cn('group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-        active(n.href) ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground')}>
-      <span className={cn('absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-sidebar-primary transition-opacity', active(n.href) ? 'opacity-100' : 'opacity-0')} />
-      <n.icon className="h-4 w-4" /> {n.label}
-    </Link>
+  const { data: commons } = useCommons();
+  const me = commons?.subject ?? '';
+  const workParams = { limit: 40 };
+  const work = useGetMyWork(workParams, {
+    query: {
+      queryKey: [...getGetMyWorkQueryKey(workParams), me || 'anonymous'],
+      enabled: !!me,
+      refetchInterval: 20000,
+      refetchOnWindowFocus: true,
+    },
+  });
+  const attentionCount = countMarketplaceAttention(
+    (work.data?.records ?? []).map(parseBid).filter((bid) => bid.participants.includes(me)),
+    me,
   );
+  const active = (h: string) => (h === '/' ? loc === '/' : loc.startsWith(h));
+  const item = (n: (typeof primary)[number]) => {
+    const badgeCount = n.href === '/marketplace' && me ? attentionCount : 0;
+    const responseLabel = `${badgeCount} item${badgeCount === 1 ? '' : 's'} need your response`;
+    return (
+      <Link
+        key={n.href}
+        href={n.href}
+        onClick={onNav}
+        data-testid={`link-nav-${n.label.toLowerCase().replace(/\s/g, '-')}`}
+        aria-label={badgeCount > 0 ? `${n.label}, ${responseLabel}` : undefined}
+        className={cn(
+          'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+          active(n.href)
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+        )}
+      >
+        <span className={cn(
+          'absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-sidebar-primary transition-opacity',
+          active(n.href) ? 'opacity-100' : 'opacity-0',
+        )} />
+        <n.icon className="h-4 w-4" /> {n.label}
+        {badgeCount > 0 && (
+          <span
+            aria-hidden="true"
+            data-testid="nav-marketplace-attention-count"
+            className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-sidebar-primary px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-sidebar-primary-foreground"
+          >
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        )}
+      </Link>
+    );
+  };
   return (
     <nav aria-label="Main" className="space-y-6">
       <div className="space-y-0.5">{primary.map(item)}</div>

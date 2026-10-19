@@ -86,18 +86,24 @@ while anonymous and unrelated exports do not.
     Unapproved drafts did not export.
   - Conflicting origin/sequence, tampered checksums, unsafe bundle filenames and
     malformed bundles were rejected without publishing incoming content.
+- Marketplace navigation attention count unit test passed. Buyer consent/delivery,
+  seller consent/milestone deadlines, unrelated callers and signed-out identity
+  all use the same attention-item collector as the Marketplace page.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
   - Public community/repository/marketplace/people/fees/offline/settings routes
     render; no horizontal page overflow at those sizes.
   - Real fee/refund API interaction from UI; mobile menu navigation; sign-in email
-    field renders; no uncaught browser page errors.
+    field renders; signed-out Marketplace badge stays hidden; no uncaught browser
+    page errors.
   - Anonymous write/export denied, runner returns 503, invalid refund returns
     400, cross-origin write returns 403.
-  - Screenshots in ignored `generated-artifacts/browser/`.
+  - Browser screenshots are written outside the repository to `/tmp/gitai-browser-test/`.
 - Visual app preview inspected at desktop; mobile overflow on offline page was
   found in the browser test, fixed, and the acceptance test then passed.
-- Actual managed API and web workflows serve requests with loopback binds.
-  No deployment, external Git push, outreach or financial operation performed.
+- GitAI package TypeScript check and production Vite build passed. `/api/healthz`
+  returned 200 during verification; the browser suite's anonymous API checks
+  passed. No deployment, external Git push, outreach or financial operation
+  performed.
 
 ## Reproduce
 

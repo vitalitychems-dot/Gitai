@@ -86,7 +86,10 @@ export default function Marketplace() {
         <Button onClick={() => setOpen(!open)} data-testid="button-new-service"><Plus className="mr-1.5 h-4 w-4" />{open ? 'Close' : 'Draft a service'}</Button>
       </PageHead>
       {q.data && <p className="mb-6 font-mono text-xs text-muted-foreground">payments capability: {q.data.capabilities.payments}</p>}
-      {me && <MarketplaceAttention bids={bids} me={me} onRefresh={() => { void q.refetch(); }} refreshing={q.isFetching} />}
+      {me && <MarketplaceAttention bids={bids} me={me} onRefresh={() => {
+        void q.refetch();
+        void workQuery.refetch();
+      }} refreshing={q.isFetching || workQuery.isFetching} />}
       {open && <div className="mb-8"><SignInGate what="draft a service"><CreateService onDone={() => setOpen(false)} /></SignInGate></div>}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">

@@ -4,7 +4,8 @@ import { mkdirSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 const baseURL = "http://127.0.0.1:80";
-mkdirSync("generated-artifacts/browser", { recursive: true });
+const screenshotDir = "/tmp/gitai-browser-test";
+mkdirSync(screenshotDir, { recursive: true });
 const api = await request.newContext({ baseURL });
 const state = await api.get("/api/gitai/state");
 assert.equal(state.status(), 200);
@@ -34,6 +35,7 @@ try {
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2);
       assert.equal(overflow, false, `No horizontal overflow: ${width} ${path}`);
     }
+    assert.equal(await page.getByTestId("nav-marketplace-attention-count").count(), 0, `Signed-out users have no Marketplace badge at ${width}px`);
     await page.goto(baseURL + "/fees");
     await page.getByTestId("input-fee-subtotal").focus();
     await page.keyboard.press("ControlOrMeta+A");
@@ -47,10 +49,11 @@ try {
     await page.getByTestId("input-fee-refund").fill("50");
     await page.getByTestId("button-quote").click();
     await page.getByText("$52.00", { exact: true }).waitFor();
-    await page.screenshot({ path: `generated-artifacts/browser/fees-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `${screenshotDir}/fees-${width}.png`, fullPage: true });
     await page.goto(baseURL);
     if (width < 1024) {
       await page.getByTestId("button-menu").click();
+      assert.equal(await page.getByTestId("nav-marketplace-attention-count").count(), 0, `Signed-out mobile menu has no Marketplace badge at ${width}px`);
       await page.getByTestId("link-nav-marketplace").last().click();
       await page.waitForURL("**/marketplace");
     }
