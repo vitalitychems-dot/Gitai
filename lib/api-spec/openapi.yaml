@@ -11,6 +11,38 @@ tags:
   - name: health
     description: Health operations
 paths:
+  /gitai/bids:
+    post:
+      operationId: createBid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BidInput" }
+      responses:
+        "201":
+          description: Private proposed agreement; no spending authorization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/bids/{id}/actions:
+    post:
+      operationId: actOnBid
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BidAction" }
+      responses:
+        "200":
+          description: Updated agreement with append-only evidence history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+        "503":
+          description: Executable delivery blocked until independently isolated runner exists
   /gitai/state:
     get:
       operationId: getCommons
@@ -125,6 +157,7 @@ paths:
   /gitai/services/{serviceId}/bids:
     post:
       operationId: submitServiceBid
+      deprecated: true
       parameters:
         - { name: serviceId, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -133,37 +166,40 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ServiceBidInput" }
       responses:
-        "201":
-          description: Private bid visible only to the parties
+        "410":
+          description: Legacy work lifecycle disabled; use createBid with accountable operator consent
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CommunityRecord" }
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /gitai/services/{serviceId}/bids/{bidId}/accept:
     post:
       operationId: acceptServiceBid
+      deprecated: true
       parameters:
         - { name: serviceId, in: path, required: true, schema: { type: string, format: uuid } }
         - { name: bidId, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
-        "200":
-          description: Immutable quote and agreement awaiting the other party
+        "410":
+          description: Legacy work lifecycle disabled; no agreement activated
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CommunityRecord" }
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /gitai/bids/{id}/withdraw:
     post:
       operationId: withdrawServiceBid
+      deprecated: true
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       responses:
-        "200":
-          description: Unaccepted bid withdrawn by its author
+        "410":
+          description: Legacy work lifecycle disabled; use actOnBid for new agreements
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CommunityRecord" }
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /gitai/agreements/{id}/actions:
     post:
       operationId: actOnServiceAgreement
+      deprecated: true
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -172,14 +208,15 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ServiceAgreementAction" }
       responses:
-        "200":
-          description: Party-authorized agreement transition
+        "410":
+          description: Legacy work lifecycle disabled; no delivery or completion bypass permitted
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CommunityRecord" }
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /gitai/agreements/{id}/reviews:
     post:
       operationId: reviewServiceAgreement
+      deprecated: true
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -188,11 +225,11 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ServiceReviewInput" }
       responses:
-        "201":
-          description: Private evidence-backed review awaiting moderation
+        "410":
+          description: Legacy reviews disabled; no unsupported completion or delivery claim recorded
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/CommunityRecord" }
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /healthz:
     get:
       operationId: healthCheck
@@ -208,6 +245,52 @@ paths:
                 $ref: "#/components/schemas/HealthStatus"
 components:
   schemas:
+    RetiredWorkError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    BidInput:
+      type: object
+      additionalProperties: false
+      required: [serviceId, scope, subtotalMinor, deadline, milestones, operatorKind, operatorLabel, consent]
+      properties:
+        serviceId: { type: string, format: uuid }
+        parentBidId: { type: string, format: uuid }
+        sellerSubject: { type: string, pattern: "^[0-9a-f]{64}$" }
+        scope: { type: string, minLength: 1, maxLength: 4000 }
+        subtotalMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        deadline: { type: string, format: date-time }
+        operatorKind: { type: string, enum: [human, business] }
+        operatorLabel: { type: string, minLength: 1, maxLength: 100 }
+        consent: { type: boolean, enum: [true] }
+        milestones:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/WorkMilestone" }
+    WorkMilestone:
+      type: object
+      additionalProperties: false
+      required: [title, scope, dueAt]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        scope: { type: string, minLength: 1, maxLength: 2000 }
+        dueAt: { type: string, format: date-time }
+    BidAction:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [consent, withdraw, deliver, accept, reject, dispute, evidence, propose-resolution, agree-resolution, review] }
+        operatorKind: { type: string, enum: [human, business] }
+        operatorLabel: { type: string, minLength: 1, maxLength: 100 }
+        milestone: { type: integer, minimum: 0, maximum: 19 }
+        note: { type: string, minLength: 1, maxLength: 4000 }
+        evidenceUrl: { type: string, format: uri, maxLength: 1000 }
+        executable: { type: boolean }
+        eventId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
     CommunityRecord:
       type: object
       required: [id, kind, title, body, owner, status, createdAt, data]
@@ -383,4 +466,3 @@ components:
           type: string
       required:
         - status
-

@@ -30,13 +30,14 @@ export function serial(row: CommonsRecordRow) {
     Date.parse(String(row.data.expiresAt)) <= Date.now();
   return { ...result, status: expired ? "expired" : row.status, createdAt: row.createdAt.toISOString() };
 }
-export async function findRecord(id: string) {
+export async function findRecord(id: string, connection: Pick<typeof db, "select"> = db) {
   if (!z.uuid().safeParse(id).success) fail("Record not found.", 404);
-  const [r] = await db.select().from(records).where(eq(records.id, id));
+  const [r] = await connection.select().from(records).where(eq(records.id, id));
   if (!r) fail("Record not found.", 404);
   return r;
 }
 export function canRead(row: CommonsRecordRow, actor: string) {
+  if (row.kind === "bid") return !!actor && Array.isArray(row.data.participants) && row.data.participants.includes(actor);
   return row.owner === actor ||
     isParty(row, actor) ||
     (isOwner(actor) && ["report", "post", "comment", "service", "profile"].includes(row.kind)) ||
@@ -44,7 +45,7 @@ export function canRead(row: CommonsRecordRow, actor: string) {
 }
 export async function listRecords(actor: string) {
   const result = await db.select().from(records).where(isOwner(actor) ? undefined : actor
-    ? or(eq(records.owner, actor), eq(records.status, "approved"), sql`${records.data}->'parties' ? ${actor}`)
+    ? or(eq(records.owner, actor), eq(records.status, "approved"), sql`${records.data}->'parties' ? ${actor}`, sql`${records.data}->'participants' @> ${JSON.stringify([actor])}::jsonb`)
     : eq(records.status, "approved")).orderBy(desc(records.createdAt)).limit(1000);
   const blocked = new Set(result.filter(r => r.kind === "block" && r.owner === actor).map(r => r.data.subject));
   const index = new Map(result.map(r => [r.id, r]));
@@ -55,7 +56,8 @@ export async function listRecords(actor: string) {
     return !!parent && parent.status === "approved" && canRead(parent, actor) &&
       !blocked.has(parent.owner) && visibleParent(parent, depth + 1);
   };
-  return result.filter(r => canRead(r, actor) && r.status !== "deleted" && !blocked.has(r.owner) && visibleParent(r)).map(serial);
+  // Community blocking must not hide an existing agreement or its evidence.
+  return result.filter(r => canRead(r, actor) && r.status !== "deleted" && (r.kind === "bid" || isParty(r, actor) || !blocked.has(r.owner)) && visibleParent(r)).map(serial);
 }
 // A DB transaction lock serializes operator quotas and all Git operations.
 async function locked<T>(fn: (tx: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) {
@@ -109,7 +111,11 @@ export async function changeRecord(actor: string, id: string, input: unknown) {
   if (!actor) fail("Sign in first.", 401);
   const v = ChangeRecordBody.parse(input);
   return locked(async tx => {
-    const r = await findRecord(id);
+    const r = await findRecord(id, tx);
+    if (r.kind === "bid") {
+      if (!canRead(r, actor)) fail("Record not found.", 404);
+      fail("Agreements are immutable. Use the consent-based work actions.", 403);
+    }
     if (r.owner !== actor && !isOwner(actor)) fail("Record not found.", 404);
     if (["serviceBid", "serviceAgreement", "serviceReview"].includes(r.kind)) fail("Service records can only be changed through the consent workflow.", 409);
     let status = r.status;
@@ -119,7 +125,7 @@ export async function changeRecord(actor: string, id: string, input: unknown) {
       if (r.status === "deleted" || r.status === "revoked") fail("Deleted or revoked records cannot be approved.", 409);
       if (r.kind === "repository" && r.data.visibility === "private") fail("Private repositories cannot be publicly approved.");
       if (r.kind === "comment" || r.kind === "issue") {
-        const parent = await findRecord(String(r.data.parentId));
+        const parent = await findRecord(String(r.data.parentId), tx);
         if (parent.status !== "approved" || parent.data.visibility === "private") fail("Approve the public parent before publishing a reply or issue.");
       }
       status = "approved";
@@ -154,7 +160,7 @@ export async function proposeChange(actor: string, id: string, input: unknown) {
   const v = ProposeChangeBody.parse(input);
   cleanText(v.content); cleanText(v.message);
   return locked(async tx => {
-    const r = await findRecord(id);
+    const r = await findRecord(id, tx);
     // Membership expansion intentionally gated; no implicit agent access.
     if (r.kind !== "repository" || r.owner !== actor || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
     if (head(id) !== v.base) fail("Base changed. Reload and review again.", 409);
@@ -171,8 +177,8 @@ export async function mergeChange(actor: string, id: string, input: unknown) {
   const v = MergeChangeBody.parse(input);
   if (!v.reviewed) fail("Explicit review confirmation is required.");
   return locked(async tx => {
-    const r = await findRecord(id);
-    const p = await findRecord(v.proposalId);
+    const r = await findRecord(id, tx);
+    const p = await findRecord(v.proposalId, tx);
     if (!actor || r.owner !== actor || r.kind !== "repository" || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
     if (p.kind !== "proposal" || p.data.repositoryId !== id || p.status !== "proposed") fail("Open proposal not found.", 404);
     // Recover a crash between Git's atomic ref update and DB status commit.

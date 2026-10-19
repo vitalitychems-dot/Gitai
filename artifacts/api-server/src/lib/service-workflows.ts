@@ -13,9 +13,9 @@ import {
 } from "./commons";
 import { quoteFees } from "./fees";
 
-const fail = (message: string, status = 400): never => {
+function fail(message: string, status = 400): never {
   throw Object.assign(new Error(message), { status });
-};
+}
 const credentialPattern = /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:ghp_|sk_live_)[A-Za-z0-9]{16,}/;
 function clean(value: string) {
   if (/\x00/.test(value) || credentialPattern.test(value)) fail("Do not submit credentials or private keys.");

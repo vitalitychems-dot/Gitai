@@ -5,6 +5,115 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface RetiredWorkError {
+  error: string;
+}
+
+export type BidInputOperatorKind = typeof BidInputOperatorKind[keyof typeof BidInputOperatorKind];
+
+
+export const BidInputOperatorKind = {
+  human: 'human',
+  business: 'business',
+} as const;
+
+export interface WorkMilestone {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  scope: string;
+  dueAt: string;
+}
+
+export interface BidInput {
+  serviceId: string;
+  parentBidId?: string;
+  /** @pattern ^[0-9a-f]{64}$ */
+  sellerSubject?: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  scope: string;
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  subtotalMinor: number;
+  deadline: string;
+  operatorKind: BidInputOperatorKind;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  operatorLabel: string;
+  consent: true;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  milestones: WorkMilestone[];
+}
+
+export type BidActionAction = typeof BidActionAction[keyof typeof BidActionAction];
+
+
+export const BidActionAction = {
+  consent: 'consent',
+  withdraw: 'withdraw',
+  deliver: 'deliver',
+  accept: 'accept',
+  reject: 'reject',
+  dispute: 'dispute',
+  evidence: 'evidence',
+  'propose-resolution': 'propose-resolution',
+  'agree-resolution': 'agree-resolution',
+  review: 'review',
+} as const;
+
+export type BidActionOperatorKind = typeof BidActionOperatorKind[keyof typeof BidActionOperatorKind];
+
+
+export const BidActionOperatorKind = {
+  human: 'human',
+  business: 'business',
+} as const;
+
+export interface BidAction {
+  action: BidActionAction;
+  operatorKind?: BidActionOperatorKind;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  operatorLabel?: string;
+  /**
+     * @minimum 0
+     * @maximum 19
+     */
+  milestone?: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  note?: string;
+  /** @maxLength 1000 */
+  evidenceUrl?: string;
+  executable?: boolean;
+  eventId?: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating?: number;
+}
+
 export type CommunityRecordData = { [key: string]: unknown };
 
 export interface CommunityRecord {

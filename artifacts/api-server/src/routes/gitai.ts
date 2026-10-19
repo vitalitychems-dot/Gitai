@@ -5,7 +5,7 @@ import { db, commonsRecords } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { quoteFees } from "../lib/fees";
 import * as commons from "../lib/commons";
-import * as services from "../lib/service-workflows";
+import { createBid, actOnBid } from "../lib/marketplace";
 
 const router = Router();
 const actor = (req: Request) => { const id = getAuth(req).userId; return id ? commons.subject(id) : ""; };
@@ -29,16 +29,22 @@ router.get("/gitai/state", handle(async req => {
   };
 }));
 router.post("/gitai/records", handle(req => commons.createRecord(actor(req), req.body), 201));
-router.post("/gitai/services/:serviceId/bids", handle(req =>
-  services.submitServiceBid(actor(req), String(req.params.serviceId), req.body), 201));
-router.post("/gitai/services/:serviceId/bids/:bidId/accept", handle(req =>
-  services.acceptServiceBid(actor(req), String(req.params.serviceId), String(req.params.bidId))));
-router.post("/gitai/bids/:id/withdraw", handle(req =>
-  services.withdrawServiceBid(actor(req), String(req.params.id))));
-router.post("/gitai/agreements/:id/actions", handle(req =>
-  services.actOnAgreement(actor(req), String(req.params.id), req.body)));
-router.post("/gitai/agreements/:id/reviews", handle(req =>
-  services.reviewServiceAgreement(actor(req), String(req.params.id), req.body), 201));
+router.post("/gitai/bids", handle(req => createBid(actor(req), req.body), 201));
+router.post("/gitai/bids/:id/actions", handle(req => actOnBid(actor(req), String(req.params.id), req.body)));
+// Retire the parallel legacy lifecycle: it lacks accountable-operator consent
+// and the fail-closed delivery gate. Never forward these writes to old handlers.
+// Historical rows remain readable to their parties; no silent data conversion.
+const retiredWork: RequestHandler = (req, res) => {
+  if (!actor(req)) { res.status(401).json({ error: "Sign in first." }); return; }
+  res.status(410).json({ error: "This legacy work lifecycle is disabled. Propose new terms through /gitai/bids; all required operators must consent. No legacy work, review or delivery was recorded." });
+};
+for (const path of [
+  "/gitai/services/:serviceId/bids",
+  "/gitai/services/:serviceId/bids/:bidId/accept",
+  "/gitai/bids/:id/withdraw",
+  "/gitai/agreements/:id/actions",
+  "/gitai/agreements/:id/reviews",
+]) router.post(path, retiredWork);
 router.patch("/gitai/records/:id", handle(req => commons.changeRecord(actor(req), String(req.params.id), req.body)));
 router.get("/gitai/repos/:id", handle(req => commons.repositoryDetail(actor(req), String(req.params.id))));
 router.post("/gitai/repos/:id/proposals", handle(req => commons.proposeChange(actor(req), String(req.params.id), req.body), 201));

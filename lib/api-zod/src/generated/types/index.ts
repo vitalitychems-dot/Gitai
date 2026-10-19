@@ -6,6 +6,11 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from './bidAction';
+export * from './bidActionAction';
+export * from './bidActionOperatorKind';
+export * from './bidInput';
+export * from './bidInputOperatorKind';
 export * from './commons';
 export * from './commonsCapabilities';
 export * from './commonsQuotas';
@@ -25,9 +30,11 @@ export * from './recordInputData';
 export * from './recordInputKind';
 export * from './repoFile';
 export * from './repositoryDetail';
+export * from './retiredWorkError';
 export * from './serviceAgreementAction';
 export * from './serviceAgreementActionAction';
 export * from './serviceAgreementActionOutcome';
 export * from './serviceBidInput';
 export * from './serviceMilestoneInput';
 export * from './serviceReviewInput';
+export * from './workMilestone';

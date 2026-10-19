@@ -7,6 +7,8 @@ import { EmptyPlot, ErrorPanel, Field, ListSkeleton, PageHead, SignInGate, Statu
 import { RecordActions } from '@/components/record-actions';
 import { cn } from '@/lib/utils';
 import { money, num, str, toMinor } from '@/lib/commons';
+import { AgreementCard, BidForm } from '@/components/bids';
+import { parseBid } from '@/lib/bids';
 
 function CreateService({ onDone }: { onDone: () => void }) {
   const create = useCreate('Service drafted. It is not listed until approved.');
@@ -47,6 +49,9 @@ export default function Marketplace() {
   const q = useCommons();
   const services = useRecords('service');
   const [open, setOpen] = useState(false);
+  const [bidOn, setBidOn] = useState<string | null>(null);
+  const me = q.data?.subject ?? '';
+  const bids = useRecords('bid').map(parseBid).filter((b) => b.participants.includes(me));
   const [term, setTerm] = useState('');
   const [type, setType] = useState<'all' | 'offer' | 'request'>('all');
   const t = term.trim().toLowerCase();
@@ -86,8 +91,14 @@ export default function Marketplace() {
                 </div>
                 <h2 className="mt-2 text-lg font-bold">{s.title}</h2>
                 {s.body && <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm text-muted-foreground">{s.body}</p>}
-                <p className="mt-2 font-mono text-[11px] text-muted-foreground">by {s.owner}</p>
+                <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">by {s.owner}</p>
                 <RecordActions record={s} />
+                {s.status === 'approved' && me && s.owner !== me && (
+                  <div className="mt-3">
+                    <Button size="sm" variant="outline" onClick={() => setBidOn(bidOn === s.id ? null : s.id)} data-testid={`button-bid-${s.id}`}>{bidOn === s.id ? 'Close bid' : str(s, 'offerType') === 'request' ? 'Bid to deliver this' : 'Bid to buy this'}</Button>
+                    {bidOn === s.id && <BidForm service={s} onDone={() => setBidOn(null)} />}
+                  </div>
+                )}
               </div>
               <div className="text-left md:text-right">
                 <p className="font-display text-2xl font-extrabold" data-testid={`text-price-${s.id}`}>{money(num(s, 'subtotalMinor'))}</p>
@@ -96,6 +107,14 @@ export default function Marketplace() {
             </li>
           ))}
         </ul>
+      )}
+      {me && (
+        <section className="mt-12" data-testid="section-agreements">
+          <h2 className="font-display text-2xl font-extrabold">Your private agreements</h2>
+          <p className="mb-4 mt-1 text-sm text-muted-foreground">Visible only to participants. Terms are immutable; every step is an append-only event. Payment provider prerequisites are unverified, so nothing is charged, held or paid out.</p>
+          {bids.length === 0 ? <EmptyPlot title="No agreements yet.">Bid on an approved service to start one. Every participant consents before work becomes active.</EmptyPlot>
+            : <div className="space-y-6">{bids.map((b) => <AgreementCard key={b.rec.id} b={b} me={me} services={services} />)}</div>}
+        </section>
       )}
     </>
   );

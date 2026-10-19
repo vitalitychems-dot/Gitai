@@ -1,2 +1,3 @@
 - [Fee policy intent](gitai-boundaries.md) — historical wallet/staking code does not authorize extra fees; escrow wording remains undecided.
 - [Browser test environment](browser-test-environment.md) — downloaded Playwright Chromium lacks Nix shared libraries; use system Chromium for trusted app tests.
+- [Marketplace consent](marketplace-consent.md) — scoped work consent is not verified identity, legal-payee approval or financial authorization.

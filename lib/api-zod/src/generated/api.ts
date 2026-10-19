@@ -8,6 +8,91 @@
 import * as zod from 'zod';
 
 
+export const createBidBodySellerSubjectRegExp = new RegExp('^[0-9a-f]{64}$');
+export const createBidBodyScopeMax = 4000;
+
+export const createBidBodySubtotalMinorMax = 100000000;
+
+export const createBidBodyOperatorLabelMax = 100;
+
+export const createBidBodyMilestonesItemTitleMax = 120;
+
+export const createBidBodyMilestonesItemScopeMax = 2000;
+
+export const createBidBodyMilestonesMax = 20;
+
+
+
+export const CreateBidBody = zod.object({
+  "serviceId": zod.string().uuid(),
+  "parentBidId": zod.string().uuid().optional(),
+  "sellerSubject": zod.string().regex(createBidBodySellerSubjectRegExp).optional(),
+  "scope": zod.string().min(1).max(createBidBodyScopeMax),
+  "subtotalMinor": zod.number().int().min(1).max(createBidBodySubtotalMinorMax),
+  "deadline": zod.coerce.date(),
+  "operatorKind": zod.enum(['human', 'business']),
+  "operatorLabel": zod.string().min(1).max(createBidBodyOperatorLabelMax),
+  "consent": zod.literal(true),
+  "milestones": zod.array(zod.object({
+  "title": zod.string().min(1).max(createBidBodyMilestonesItemTitleMax),
+  "scope": zod.string().min(1).max(createBidBodyMilestonesItemScopeMax),
+  "dueAt": zod.coerce.date()
+})).min(1).max(createBidBodyMilestonesMax)
+})
+
+export const CreateBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ActOnBidParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const actOnBidBodyOperatorLabelMax = 100;
+
+export const actOnBidBodyMilestoneMin = 0;
+export const actOnBidBodyMilestoneMax = 19;
+
+export const actOnBidBodyNoteMax = 4000;
+
+export const actOnBidBodyEvidenceUrlMax = 1000;
+
+export const actOnBidBodyRatingMax = 5;
+
+
+
+export const ActOnBidBody = zod.object({
+  "action": zod.enum(['consent', 'withdraw', 'deliver', 'accept', 'reject', 'dispute', 'evidence', 'propose-resolution', 'agree-resolution', 'review']),
+  "operatorKind": zod.enum(['human', 'business']).optional(),
+  "operatorLabel": zod.string().min(1).max(actOnBidBodyOperatorLabelMax).optional(),
+  "milestone": zod.number().int().min(actOnBidBodyMilestoneMin).max(actOnBidBodyMilestoneMax).optional(),
+  "note": zod.string().min(1).max(actOnBidBodyNoteMax).optional(),
+  "evidenceUrl": zod.string().url().max(actOnBidBodyEvidenceUrlMax).optional(),
+  "executable": zod.boolean().optional(),
+  "eventId": zod.string().uuid().optional(),
+  "rating": zod.number().int().min(1).max(actOnBidBodyRatingMax).optional()
+})
+
+export const ActOnBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
 export const GetCommonsResponse = zod.object({
   "records": zod.array(zod.object({
   "id": zod.string(),
@@ -221,6 +306,9 @@ export const ExportMyDataResponse = zod.object({
 export const RequestRunResponse = zod.void()
 
 
+/**
+ * @deprecated
+ */
 export const SubmitServiceBidParams = zod.object({
   "serviceId": zod.coerce.string().uuid()
 })
@@ -256,51 +344,33 @@ export const SubmitServiceBidBody = zod.object({
 })).min(1).max(submitServiceBidBodyMilestonesMax)
 })
 
-export const SubmitServiceBidResponse = zod.object({
-  "id": zod.string(),
-  "kind": zod.string(),
-  "title": zod.string(),
-  "body": zod.string(),
-  "owner": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.string(),
-  "data": zod.record(zod.string(), zod.unknown())
-})
+export const SubmitServiceBidResponse = zod.void()
 
 
+/**
+ * @deprecated
+ */
 export const AcceptServiceBidParams = zod.object({
   "serviceId": zod.coerce.string().uuid(),
   "bidId": zod.coerce.string().uuid()
 })
 
-export const AcceptServiceBidResponse = zod.object({
-  "id": zod.string(),
-  "kind": zod.string(),
-  "title": zod.string(),
-  "body": zod.string(),
-  "owner": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.string(),
-  "data": zod.record(zod.string(), zod.unknown())
-})
+export const AcceptServiceBidResponse = zod.void()
 
 
+/**
+ * @deprecated
+ */
 export const WithdrawServiceBidParams = zod.object({
   "id": zod.coerce.string().uuid()
 })
 
-export const WithdrawServiceBidResponse = zod.object({
-  "id": zod.string(),
-  "kind": zod.string(),
-  "title": zod.string(),
-  "body": zod.string(),
-  "owner": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.string(),
-  "data": zod.record(zod.string(), zod.unknown())
-})
+export const WithdrawServiceBidResponse = zod.void()
 
 
+/**
+ * @deprecated
+ */
 export const ActOnServiceAgreementParams = zod.object({
   "id": zod.coerce.string().uuid()
 })
@@ -321,18 +391,12 @@ export const ActOnServiceAgreementBody = zod.object({
   "outcome": zod.enum(['accept_delivery', 'revise', 'cancel_agreement']).optional()
 })
 
-export const ActOnServiceAgreementResponse = zod.object({
-  "id": zod.string(),
-  "kind": zod.string(),
-  "title": zod.string(),
-  "body": zod.string(),
-  "owner": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.string(),
-  "data": zod.record(zod.string(), zod.unknown())
-})
+export const ActOnServiceAgreementResponse = zod.void()
 
 
+/**
+ * @deprecated
+ */
 export const ReviewServiceAgreementParams = zod.object({
   "id": zod.coerce.string().uuid()
 })
@@ -349,16 +413,7 @@ export const ReviewServiceAgreementBody = zod.object({
   "body": zod.string().min(reviewServiceAgreementBodyBodyMin).max(reviewServiceAgreementBodyBodyMax)
 })
 
-export const ReviewServiceAgreementResponse = zod.object({
-  "id": zod.string(),
-  "kind": zod.string(),
-  "title": zod.string(),
-  "body": zod.string(),
-  "owner": zod.string(),
-  "status": zod.string(),
-  "createdAt": zod.string(),
-  "data": zod.record(zod.string(), zod.unknown())
-})
+export const ReviewServiceAgreementResponse = zod.void()
 
 
 /**

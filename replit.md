@@ -30,8 +30,9 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-Current bounded slice: managed Clerk sign-in; persistent drafts; real Git file/history/proposal/reviewed merge; marketplace listing and forum drafts; scoped data export; quote-only 4% buyer + 4% seller fees; Linux CLI manual Git-bundle community events. No fictional seeded activity.
+Current bounded slice: managed Clerk sign-in; persistent drafts; real Git file/history/proposal/reviewed merge; marketplace listings and private consent-based bids, scoped subcontracts, milestones, manual deliveries, disputes and evidence-linked reviews; forum drafts; scoped data export; quote-only 4% buyer + 4% seller fees; Linux CLI manual Git-bundle community events. No fictional seeded activity.
 Public community approval requires explicit owner configuration. Invitations never send/admit. Runner, live collectors, package publishing, payments and external pushes are disabled.
+Marketplace work boundaries and verification: `docs/MARKETPLACE-WORK.md` and `docs/gitai-marketplace-authenticated-regression.md`. Operator declarations are self-reported; work consent never grants spending authority or verified legal-payee status.
 
 ## User preferences
 

@@ -20,6 +20,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BidAction,
+  BidInput,
   Commons,
   CommunityRecord,
   DataExport,
@@ -31,6 +33,7 @@ import type {
   RecordChange,
   RecordInput,
   RepositoryDetail,
+  RetiredWorkError,
   ServiceAgreementAction,
   ServiceBidInput,
   ServiceReviewInput
@@ -62,6 +65,171 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getCreateBidUrl = () => {
+
+
+
+
+  return `/api/gitai/bids`
+}
+
+export const createBid = async (bidInput: BidInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CommunityRecord>(getCreateBidUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(bidInput)
+  }
+);}
+
+
+
+
+
+export const getCreateBidMutationKey = () => ['createBid'] as const;
+
+export const getCreateBidMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBid>>, TError,CreateBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createBid>>, TError,CreateBidMutationVariables, TContext> => {
+
+const mutationKey = getCreateBidMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBid>>, CreateBidMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBid(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBidMutationResult = NonNullable<Awaited<ReturnType<typeof createBid>>>
+    export type CreateBidMutationBody = BodyType<BidInput>
+    export type CreateBidMutationError = ErrorType<unknown>
+    export type CreateBidMutationVariables = {data: BodyType<BidInput>}
+
+    export const useCreateBid = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBid>>, TError,CreateBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createBid>>,
+        TError,
+        CreateBidMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateBidMutationOptions(options));
+    }
+
+export const getActOnBidUrl = (id: string,) => {
+
+
+
+
+  return `/api/gitai/bids/${id}/actions`
+}
+
+export const actOnBid = async (id: string,
+    bidAction: BidAction, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CommunityRecord>(getActOnBidUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(bidAction)
+  }
+);}
+
+
+
+
+
+export const getActOnBidMutationKey = () => ['actOnBid'] as const;
+
+export const getActOnBidMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnBid>>, TError,ActOnBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof actOnBid>>, TError,ActOnBidMutationVariables, TContext> => {
+
+const mutationKey = getActOnBidMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof actOnBid>>, ActOnBidMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  actOnBid(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ActOnBidMutationResult = NonNullable<Awaited<ReturnType<typeof actOnBid>>>
+    export type ActOnBidMutationBody = BodyType<BidAction>
+    export type ActOnBidMutationError = ErrorType<void>
+    export type ActOnBidMutationVariables = {id: string;data: BodyType<BidAction>}
+
+    export const useActOnBid = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnBid>>, TError,ActOnBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof actOnBid>>,
+        TError,
+        ActOnBidMutationVariables,
+        TContext
+      > => {
+      return useMutation(getActOnBidMutationOptions(options));
+    }
 
 export const getGetCommonsUrl = () => {
 
@@ -765,8 +933,11 @@ export const getSubmitServiceBidUrl = (serviceId: string,) => {
   return `/api/gitai/services/${serviceId}/bids`
 }
 
+/**
+ * @deprecated
+ */
 export const submitServiceBid = async (serviceId: string,
-    serviceBidInput: ServiceBidInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+    serviceBidInput: ServiceBidInput, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -782,7 +953,7 @@ export const submitServiceBid = async (serviceId: string,
     }
     return headers;
   };
-return customFetch<CommunityRecord>(getSubmitServiceBidUrl(serviceId),
+return customFetch<unknown>(getSubmitServiceBidUrl(serviceId),
   {
     ...options,
     method: 'POST',
@@ -797,7 +968,7 @@ return customFetch<CommunityRecord>(getSubmitServiceBidUrl(serviceId),
 
 export const getSubmitServiceBidMutationKey = () => ['submitServiceBid'] as const;
 
-export const getSubmitServiceBidMutationOptions = <TError = ErrorType<unknown>,
+export const getSubmitServiceBidMutationOptions = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext> => {
 
@@ -826,10 +997,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type SubmitServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof submitServiceBid>>>
     export type SubmitServiceBidMutationBody = BodyType<ServiceBidInput>
-    export type SubmitServiceBidMutationError = ErrorType<unknown>
+    export type SubmitServiceBidMutationError = ErrorType<RetiredWorkError>
     export type SubmitServiceBidMutationVariables = {serviceId: string;data: BodyType<ServiceBidInput>}
 
-    export const useSubmitServiceBid = <TError = ErrorType<unknown>,
+    /**
+ * @deprecated
+ */
+export const useSubmitServiceBid = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitServiceBid>>, TError,SubmitServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof submitServiceBid>>,
@@ -849,10 +1023,13 @@ export const getAcceptServiceBidUrl = (serviceId: string,
   return `/api/gitai/services/${serviceId}/bids/${bidId}/accept`
 }
 
+/**
+ * @deprecated
+ */
 export const acceptServiceBid = async (serviceId: string,
-    bidId: string, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+    bidId: string, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
 
-  return customFetch<CommunityRecord>(getAcceptServiceBidUrl(serviceId,bidId),
+  return customFetch<unknown>(getAcceptServiceBidUrl(serviceId,bidId),
   {
     ...options,
     method: 'POST'
@@ -867,7 +1044,7 @@ export const acceptServiceBid = async (serviceId: string,
 
 export const getAcceptServiceBidMutationKey = () => ['acceptServiceBid'] as const;
 
-export const getAcceptServiceBidMutationOptions = <TError = ErrorType<unknown>,
+export const getAcceptServiceBidMutationOptions = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext> => {
 
@@ -896,10 +1073,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type AcceptServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof acceptServiceBid>>>
 
-    export type AcceptServiceBidMutationError = ErrorType<unknown>
+    export type AcceptServiceBidMutationError = ErrorType<RetiredWorkError>
     export type AcceptServiceBidMutationVariables = {serviceId: string;bidId: string}
 
-    export const useAcceptServiceBid = <TError = ErrorType<unknown>,
+    /**
+ * @deprecated
+ */
+export const useAcceptServiceBid = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptServiceBid>>, TError,AcceptServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof acceptServiceBid>>,
@@ -918,9 +1098,12 @@ export const getWithdrawServiceBidUrl = (id: string,) => {
   return `/api/gitai/bids/${id}/withdraw`
 }
 
-export const withdrawServiceBid = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+/**
+ * @deprecated
+ */
+export const withdrawServiceBid = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
 
-  return customFetch<CommunityRecord>(getWithdrawServiceBidUrl(id),
+  return customFetch<unknown>(getWithdrawServiceBidUrl(id),
   {
     ...options,
     method: 'POST'
@@ -935,7 +1118,7 @@ export const withdrawServiceBid = async (id: string, options?: Parameters<typeof
 
 export const getWithdrawServiceBidMutationKey = () => ['withdrawServiceBid'] as const;
 
-export const getWithdrawServiceBidMutationOptions = <TError = ErrorType<unknown>,
+export const getWithdrawServiceBidMutationOptions = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext> => {
 
@@ -964,10 +1147,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type WithdrawServiceBidMutationResult = NonNullable<Awaited<ReturnType<typeof withdrawServiceBid>>>
 
-    export type WithdrawServiceBidMutationError = ErrorType<unknown>
+    export type WithdrawServiceBidMutationError = ErrorType<RetiredWorkError>
     export type WithdrawServiceBidMutationVariables = {id: string}
 
-    export const useWithdrawServiceBid = <TError = ErrorType<unknown>,
+    /**
+ * @deprecated
+ */
+export const useWithdrawServiceBid = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof withdrawServiceBid>>, TError,WithdrawServiceBidMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof withdrawServiceBid>>,
@@ -986,8 +1172,11 @@ export const getActOnServiceAgreementUrl = (id: string,) => {
   return `/api/gitai/agreements/${id}/actions`
 }
 
+/**
+ * @deprecated
+ */
 export const actOnServiceAgreement = async (id: string,
-    serviceAgreementAction: ServiceAgreementAction, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+    serviceAgreementAction: ServiceAgreementAction, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1003,7 +1192,7 @@ export const actOnServiceAgreement = async (id: string,
     }
     return headers;
   };
-return customFetch<CommunityRecord>(getActOnServiceAgreementUrl(id),
+return customFetch<unknown>(getActOnServiceAgreementUrl(id),
   {
     ...options,
     method: 'POST',
@@ -1018,7 +1207,7 @@ return customFetch<CommunityRecord>(getActOnServiceAgreementUrl(id),
 
 export const getActOnServiceAgreementMutationKey = () => ['actOnServiceAgreement'] as const;
 
-export const getActOnServiceAgreementMutationOptions = <TError = ErrorType<unknown>,
+export const getActOnServiceAgreementMutationOptions = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext> => {
 
@@ -1047,10 +1236,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ActOnServiceAgreementMutationResult = NonNullable<Awaited<ReturnType<typeof actOnServiceAgreement>>>
     export type ActOnServiceAgreementMutationBody = BodyType<ServiceAgreementAction>
-    export type ActOnServiceAgreementMutationError = ErrorType<unknown>
+    export type ActOnServiceAgreementMutationError = ErrorType<RetiredWorkError>
     export type ActOnServiceAgreementMutationVariables = {id: string;data: BodyType<ServiceAgreementAction>}
 
-    export const useActOnServiceAgreement = <TError = ErrorType<unknown>,
+    /**
+ * @deprecated
+ */
+export const useActOnServiceAgreement = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof actOnServiceAgreement>>, TError,ActOnServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof actOnServiceAgreement>>,
@@ -1069,8 +1261,11 @@ export const getReviewServiceAgreementUrl = (id: string,) => {
   return `/api/gitai/agreements/${id}/reviews`
 }
 
+/**
+ * @deprecated
+ */
 export const reviewServiceAgreement = async (id: string,
-    serviceReviewInput: ServiceReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<CommunityRecord> => {
+    serviceReviewInput: ServiceReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<unknown> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1086,7 +1281,7 @@ export const reviewServiceAgreement = async (id: string,
     }
     return headers;
   };
-return customFetch<CommunityRecord>(getReviewServiceAgreementUrl(id),
+return customFetch<unknown>(getReviewServiceAgreementUrl(id),
   {
     ...options,
     method: 'POST',
@@ -1101,7 +1296,7 @@ return customFetch<CommunityRecord>(getReviewServiceAgreementUrl(id),
 
 export const getReviewServiceAgreementMutationKey = () => ['reviewServiceAgreement'] as const;
 
-export const getReviewServiceAgreementMutationOptions = <TError = ErrorType<unknown>,
+export const getReviewServiceAgreementMutationOptions = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext> => {
 
@@ -1130,10 +1325,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ReviewServiceAgreementMutationResult = NonNullable<Awaited<ReturnType<typeof reviewServiceAgreement>>>
     export type ReviewServiceAgreementMutationBody = BodyType<ServiceReviewInput>
-    export type ReviewServiceAgreementMutationError = ErrorType<unknown>
+    export type ReviewServiceAgreementMutationError = ErrorType<RetiredWorkError>
     export type ReviewServiceAgreementMutationVariables = {id: string;data: BodyType<ServiceReviewInput>}
 
-    export const useReviewServiceAgreement = <TError = ErrorType<unknown>,
+    /**
+ * @deprecated
+ */
+export const useReviewServiceAgreement = <TError = ErrorType<RetiredWorkError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewServiceAgreement>>, TError,ReviewServiceAgreementMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof reviewServiceAgreement>>,

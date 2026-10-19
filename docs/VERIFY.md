@@ -1,5 +1,43 @@
 # Verification and operational status
 
+## Consent-based marketplace update
+
+The marketplace now supports private bids, explicit accountable-operator
+consent, one-tier three-party subcontracts, deadlines and milestones, manual
+deliveries, buyer rejection/resubmission/acceptance, evidence-bearing disputes,
+mutually agreed resolutions, and interaction-backed private reviews.
+
+Verified in a disposable database schema: both offer/request role directions,
+private visibility, immutable agreement records, consent replay/concurrency,
+upstream subcontract consent, expired deadlines, executable-delivery refusal,
+multi-milestone completion, stale delivery decisions, disputes/resolutions and
+review evidence/duplicate restrictions. The test drops its schema afterward.
+`pnpm run typecheck` passed after contract regeneration.
+
+An authenticated synthetic buyer/seller browser journey exercised proposal,
+consent, executable 503 refusal, manual rejection/resubmission, two milestone
+acceptances, both reviews, dispute/evidence and mutual resolution with reload
+persistence. Anonymous and outsider views excluded private work data. Synthetic
+fixtures were removed by their exact IDs. See
+`gitai-marketplace-authenticated-regression.md` for replay details and responsive
+checks. Subcontract and withdrawal browser forms were not exercised in this
+pass; their state/authorization rules have disposable DB coverage.
+
+These results do not remove the production blockers below. Identity assertions
+remain self-reported, executable work remains blocked without an isolated
+runner, payment providers remain disabled, and fees are calculation-only.
+
+After integrating concurrent main-branch work, the duplicate legacy lifecycle
+write routes were explicitly retired (authenticated 410, anonymous 401), rather
+than retaining a path around operator/delivery/evidence safeguards. The
+disposable-schema suite exercises every retired route through the actual
+Express router with synthetic authenticated middleware output for buyer, seller
+and outsider identities, plus anonymous requests. It covers attempted activation,
+undeclared delivery, delivery-free completion via dispute resolution, and review
+creation, and asserts that the database remains unchanged. Full typecheck and
+the expanded suite passed after this correction; the new lifecycle UI and its
+previously verified browser journey were not changed by retiring these routes.
+
 ## What actually ran in this build
 
 - OpenAPI code generation and TypeScript library generation.
