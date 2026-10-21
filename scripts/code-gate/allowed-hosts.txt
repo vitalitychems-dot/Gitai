@@ -22,3 +22,12 @@ python.org
 zenodo.org
 doi.org
 brain-cog.network
+
+# Clerk Frontend API the API server proxies for authentication.
+frontend-api.clerk.dev
+# Official shadcn components schema referenced by components.json.
+ui.shadcn.com
+# Google Fonts stylesheet the app index pages load.
+fonts.googleapis.com
+# Google Fonts file host the app index pages preconnect to.
+fonts.gstatic.com

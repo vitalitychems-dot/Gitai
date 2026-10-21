@@ -108,11 +108,11 @@ This copy is in the public Gitai repository, `vitalitychems-dot/Gitai`. The scan
 
 The workflow stays at `scripts/code-gate/tessera-mesh-sync.yml.example`. It is not installed under `.github/workflows/`, because the credential that maintains Gitai has no workflow scope. This change does not add a CODEOWNERS file, does not change branch protection, and does not turn `code-gate` on as a required status check.
 
-`scripts/code-gate/allowed-hosts.txt` is the collab file from `eb81e932`, unchanged. No Gitai-only host was added.
+`scripts/code-gate/allowed-hosts.txt` starts from the collab file at `eb81e932`. Four Gitai hosts were added, each with a one-line reason: `frontend-api.clerk.dev`, `ui.shadcn.com`, `fonts.googleapis.com`, and `fonts.gstatic.com`. No wildcard, raw IP, or private host was added.
 
 Gitai history on `main` is shorter than 20 commits, so a history scan is the whole tree (empty tree through `main`), not `main~20`. The collab SHAs in Measurements are not Gitai commits.
 
-History scan (TESTED, empty tree `4b825dc642cb6eb9a060e54bf8d69288fbee4904` through `ed3f9e7598c8ee064e10dfea9bc32b62568ba310`, 11 commits): 225 files, 25,141 added lines, 24,327 in code and config. 12 blocking findings, all rule `net-public-url`, none suppressed. No credential rule fired. Those hosts were left off the allowlist.
+History scan (TESTED, empty tree `4b825dc642cb6eb9a060e54bf8d69288fbee4904` through `ed3f9e7598c8ee064e10dfea9bc32b62568ba310`, 11 commits): 225 files, 25,141 added lines, 24,327 in code and config. After the four Gitai hosts above, 2 blocking findings remain, both `net-public-url`, none suppressed. No credential rule fired. The two outbound product links were left flagged.
 
 `python3 -m unittest discover -s scripts/code-gate -t scripts/code-gate`
 
