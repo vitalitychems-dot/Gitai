@@ -31,3 +31,7 @@ ui.shadcn.com
 fonts.googleapis.com
 # Google Fonts file host the app index pages preconnect to.
 fonts.gstatic.com
+# outbound user-facing link (WalletPage.tsx), not an API the code calls
+phantom.app
+# outbound user-facing link (WalletPage.tsx), not an API the code calls
+jup.ag
