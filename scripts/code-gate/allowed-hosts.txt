@@ -1,0 +1,37 @@
+# Reviewed hostnames for public URL checks. One hostname per line.
+# A listed host also allows its subdomains (api.github.com via github.com).
+# This file does not relax database URL rules.
+# Blank lines and # comments are ignored. No schemes or paths.
+
+github.com
+api.github.com
+docs.github.com
+doc.libsodium.org
+owasp.org
+cheatsheetseries.owasp.org
+www.w3.org
+age-encryption.org
+csrc.nist.gov
+pages.nist.gov
+learn.microsoft.com
+passkeys.dev
+fidoalliance.org
+# Badge and citation hosts linked from checkout notes (.txt is scanned).
+img.shields.io
+python.org
+zenodo.org
+doi.org
+brain-cog.network
+
+# Clerk Frontend API the API server proxies for authentication.
+frontend-api.clerk.dev
+# Official shadcn components schema referenced by components.json.
+ui.shadcn.com
+# Google Fonts stylesheet the app index pages load.
+fonts.googleapis.com
+# Google Fonts file host the app index pages preconnect to.
+fonts.gstatic.com
+# outbound user-facing link (WalletPage.tsx), not an API the code calls; apex host, and the gate also matches its subdomains
+phantom.app
+# outbound user-facing link (WalletPage.tsx), not an API the code calls; apex host, and the gate also matches its subdomains
+jup.ag
