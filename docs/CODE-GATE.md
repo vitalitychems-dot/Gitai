@@ -108,7 +108,7 @@ This copy is in the public Gitai repository, `vitalitychems-dot/Gitai`. The scan
 
 The workflow stays at `scripts/code-gate/tessera-mesh-sync.yml.example`. It is not installed under `.github/workflows/`, because the credential that maintains Gitai has no workflow scope. This change does not add a CODEOWNERS file, does not change branch protection, and does not turn `code-gate` on as a required status check.
 
-`scripts/code-gate/allowed-hosts.txt` was not one of the five collab blobs. Its lines are the hosts `test_allowlist_loader` requires by name, plus the badge and citation hosts named above (`img.shields.io`, `python.org`, `zenodo.org`, `doi.org`, `brain-cog.network`). No Gitai-only host was added.
+`scripts/code-gate/allowed-hosts.txt` is the collab file from `eb81e932`, unchanged. No Gitai-only host was added.
 
 Gitai history on `main` is shorter than 20 commits, so a history scan is the whole tree (empty tree through `main`), not `main~20`. The collab SHAs in Measurements are not Gitai commits.
 

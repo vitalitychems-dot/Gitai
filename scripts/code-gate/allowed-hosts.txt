@@ -1,5 +1,8 @@
-# Hosts the unit tests require to be present in this file.
-# test_allowlist_loader checks membership. A parent does not satisfy that check.
+# Reviewed hostnames for public URL checks. One hostname per line.
+# A listed host also allows its subdomains (api.github.com via github.com).
+# This file does not relax database URL rules.
+# Blank lines and # comments are ignored. No schemes or paths.
+
 github.com
 api.github.com
 docs.github.com
@@ -13,9 +16,7 @@ pages.nist.gov
 learn.microsoft.com
 passkeys.dev
 fidoalliance.org
-
-# Badge and citation hosts named in docs/CODE-GATE.md.
-# www.brain-cog.network is covered by the parent.
+# Badge and citation hosts linked from checkout notes (.txt is scanned).
 img.shields.io
 python.org
 zenodo.org
