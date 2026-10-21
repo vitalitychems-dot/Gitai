@@ -1,0 +1,23 @@
+# Hosts the unit tests require to be present in this file.
+# test_allowlist_loader checks membership. A parent does not satisfy that check.
+github.com
+api.github.com
+docs.github.com
+doc.libsodium.org
+owasp.org
+cheatsheetseries.owasp.org
+www.w3.org
+age-encryption.org
+csrc.nist.gov
+pages.nist.gov
+learn.microsoft.com
+passkeys.dev
+fidoalliance.org
+
+# Badge and citation hosts named in docs/CODE-GATE.md.
+# www.brain-cog.network is covered by the parent.
+img.shields.io
+python.org
+zenodo.org
+doi.org
+brain-cog.network
