@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { allowedOrigins } from "./cors-allowlist";
+import { allowedOrigins } from "./cors-allowlist.ts";
 
 const STATE_CHANGING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
