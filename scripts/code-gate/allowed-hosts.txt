@@ -27,10 +27,6 @@ brain-cog.network
 frontend-api.clerk.dev
 # Official shadcn components schema referenced by components.json.
 ui.shadcn.com
-# Google Fonts stylesheet the app index pages load.
-fonts.googleapis.com
-# Google Fonts file host the app index pages preconnect to.
-fonts.gstatic.com
 # outbound user-facing link (WalletPage.tsx), not an API the code calls; apex host, and the gate also matches its subdomains
 phantom.app
 # outbound user-facing link (WalletPage.tsx), not an API the code calls; apex host, and the gate also matches its subdomains
