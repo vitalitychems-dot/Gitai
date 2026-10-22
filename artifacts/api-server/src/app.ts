@@ -4,6 +4,7 @@ import { publishableKeyFromHost } from "@clerk/shared/keys";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { createCorsMiddleware } from "./lib/cors-allowlist";
+import { createCsrfMiddleware } from "./lib/csrf";
 import { logger } from "./lib/logger";
 import {
   CLERK_PROXY_PATH,
@@ -37,6 +38,7 @@ app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(createCorsMiddleware());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(createCsrfMiddleware());
 
 app.use(
   clerkMiddleware((req) => ({
