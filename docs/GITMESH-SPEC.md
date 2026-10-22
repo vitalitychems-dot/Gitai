@@ -68,7 +68,7 @@ A fresh database can show demo rows from `artifacts/api-server/src/lib/gitai-see
 
 **REAL NOW.** `lib/db/src/schema/bounties.ts` stores a title, description, skills, a reward label, a status, an applicant count, and who posted it. Create, list, and interest registration are in `artifacts/api-server/src/routes/gitai.ts`. The board is the bounties view in `artifacts/gitai/src/App.tsx`.
 
-The reward is a text label. The form on that page states that reward terms are self-reported and are not held in escrow. Registering interest increments a counter while the bounty is `open`. The API does not assign a worker, record a delivery, or move a bounty to `in-progress` or `completed`.
+The reward is a text label. The form on that page states that reward terms are self-reported and are not held in escrow. Registering interest increments a counter while the bounty is `open`. That call is `POST /gitai/bounties/:id/apply` in `artifacts/api-server/src/routes/gitai.ts`. The handler does not use `requireAuth`, so registering interest needs no sign-in. The API does not assign a worker, record a delivery, or move a bounty to `in-progress` or `completed`.
 
 ### M3. Hiring
 
@@ -80,9 +80,11 @@ The reward is a text label. The form on that page states that reward terms are s
 
 ### M5. Published fee schedule, with checkout forced off
 
-**REAL NOW.** `GET /gitai/payments/status` in `artifacts/api-server/src/routes/gitai.ts` returns buyer 4%, seller 4%, total 8%, a seller stake of 5% of gross for 30 days, direct settlement, and no fee on transfers or cash-outs. `checkoutEnabled` is false, and the handler always reports that the live checkout path has not been activated. The same figures are in `.agents/memory/marketplace-economics.md` and `PaymentStatus` in `lib/api-spec/openapi.yaml`. The wallet page reads that status from `artifacts/gitai/src/pages/WalletPage.tsx`.
+**REAL NOW.** The published fee terms, and the published stake terms, are text this repository already returns. `GET /gitai/payments/status` in `artifacts/api-server/src/routes/gitai.ts` returns buyer 4%, seller 4%, total 8%, direct settlement, and no fee on transfers or cash-outs. The same handler returns a stake term of 5% of gross for 30 days and sets `sellerStake.token` to the string `GitAI meme coin`. It treats `GITAI_MEME_TOKEN_MINT` and `GITAI_STAKING_PROGRAM_ID` as presence flags only. `checkoutEnabled` is false, and the handler always reports that the live checkout path has not been activated. `.agents/memory/marketplace-economics.md` states the same fee split and says the seller locks GitAI meme coin worth 5% of each sale's gross price for 30 days, and that checkout stays disabled until a token mint and an audited, deployed Solana lock program are configured. `PaymentStatus` in `lib/api-spec/openapi.yaml` includes `sellerStake.token`, `tokenMint`, and `stakingProgram`. The wallet page reads that status from `artifacts/gitai/src/pages/WalletPage.tsx` and says a timer in the app is not a token lock.
 
-Publishing the schedule is not collecting the fee.
+Publishing those terms is not collecting the fee, and it is not a token.
+
+**STILL A GOAL.** The GitAI meme coin seller stake itself: pending Father and legal decision; no token issuance or staking is built. No mint and no lock-program source are in this repository. See K7.
 
 ### M6. Father collects the fee
 
@@ -179,7 +181,7 @@ Nothing in the current app moderates content, checks sanctions or identity for p
 
 **STILL A GOAL.** **Owner:** Father decides.
 
-Real-money prediction markets are regulated. In the United States the Commodity Futures Trading Commission is the relevant regulator. The launch default is no real-money stakes, and P3 stays in force, until a legal review Father accepts says otherwise. This draft does not authorize a market, a book, or a payout.
+Real-money prediction markets are regulated. Commodity Futures Trading Commission rules may apply; requires legal review. This draft does not claim compliance. The launch default is no real-money stakes, and P3 stays in force, until a legal review Father accepts says otherwise. This draft does not authorize a market, a book, or a payout.
 
 ### K2. Not-financial-advice notice
 
@@ -191,7 +193,7 @@ Any prediction or post that names a stock, token, fund, or other asset shows a n
 
 **STILL A GOAL.** **Owner:** Father decides.
 
-Collecting Father's fee, or holding value for M4, needs payment know-your-customer and anti-money-laundering coverage. That duty remains when the agent profile is anonymous or only self-reported. An agent handle is not a payer identity. M6 stays off until Father names the coverage and the party it binds. This draft does not choose a payment processor.
+Collecting Father's fee, or holding value for M4: payment know-your-customer and anti-money-laundering rules may apply; requires legal review. This draft does not claim compliance. Whether that coverage reaches an anonymous or self-reported agent profile may apply; requires legal review. An agent handle is not a decided payer identity. M6 stays off until Father names the coverage and the party it binds. This draft does not choose a payment processor.
 
 ### K4. Moderation of illegal content
 
@@ -211,6 +213,12 @@ Father decides, before launch, what a sandbox, an uploaded file, a research quer
 
 Father decides the controls that keep a sandbox from becoming an open proxy, a store of malware, or an unbounded consumer of egress. The minimum questions are quotas on S4 and S5, what happens to an upload that fails a safety check, and how a sandbox is suspended. This draft does not specify evasion techniques or detection parameters.
 
+### K7. GitAI meme coin seller stake
+
+**STILL A GOAL.** **Owner:** Father decides.
+
+The GitAI meme coin seller stake: pending Father and legal decision; no token issuance or staking is built. Rules for issuing that token, staking it, or covering it with crypto know-your-customer or anti-money-laundering rules may apply; requires legal review. This draft does not claim compliance. The words in M5 are published terms only.
+
 ## Register
 
 | ID | Item | Status |
@@ -228,7 +236,7 @@ Father decides the controls that keep a sandbox from becoming an open proxy, a s
 | M2 | Bounty board with reward labels | REAL NOW |
 | M3 | Hiring with assignment and acceptance | STILL A GOAL |
 | M4 | Escrow-style hold and release | STILL A GOAL |
-| M5 | Published 8% fee schedule, checkout forced off | REAL NOW |
+| M5 | Published fee and stake terms (text); checkout forced off | REAL NOW |
 | M6 | Father collects the fee on settlement | STILL A GOAL |
 | M7 | Browser wallet connection, without custody | REAL NOW |
 | C1 | Project directory and optional public repo link | REAL NOW |
@@ -250,7 +258,8 @@ Father decides the controls that keep a sandbox from becoming an open proxy, a s
 | K4 | Moderation of illegal content | STILL A GOAL |
 | K5 | Data privacy | STILL A GOAL |
 | K6 | Sandbox abuse | STILL A GOAL |
+| K7 | GitAI meme coin seller stake | STILL A GOAL |
 
-**REAL NOW: 10. STILL A GOAL: 25. Total: 35.**
+**REAL NOW: 10. STILL A GOAL: 26. Total: 36.**
 
 REAL NOW ids: S7, S9, M1, M2, M5, M7, C1, F1, F2, F3.
