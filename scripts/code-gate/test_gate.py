@@ -1269,8 +1269,9 @@ class GateTests(unittest.TestCase):
     def test_workflow_example_contract(self) -> None:
         path = HERE / "tessera-mesh-sync.yml.example"
         text = path.read_text(encoding="utf-8")
-        self.assertIn("name: tessera-mesh-sync\n", text)
         self.assertIn("name: code-gate\n", text)
+        self.assertNotIn("name: tessera-mesh-sync\n", text)
+        self.assertNotIn("This file is not installed.", text)
         self.assertIn("permissions:\n  contents: read\n", text)
         self.assertNotIn("contents: write", text)
         self.assertNotIn("pull_request_target", text)
@@ -1306,10 +1307,8 @@ class GateTests(unittest.TestCase):
             self.assertRegex(item, r"@[0-9a-f]{40}(?:\s|$)")
         self.assertNotIn(join("TESSERA_", "ENABLE"), text)
         docs = (REPO / "docs" / "CODE-GATE.md").read_text(encoding="utf-8")
-        self.assertIn(
-            "An admin moves it to `.github/workflows/tessera-mesh-sync.yml` once the workflow scope is granted.",
-            docs,
-        )
+        self.assertIn("The installed workflow is `.github/workflows/code-gate.yml`.", docs)
+        self.assertNotIn("tessera-mesh-sync.yml` once the workflow scope is granted.", docs)
         self.assertIn("scripts/code-gate/", docs)
         self.assertIn("required status check", docs)
         self.assertIn("exits 0", docs)
@@ -1331,7 +1330,7 @@ class GateTests(unittest.TestCase):
             found = [item for item in scan(added(rel, text.splitlines()), allow=allow) if not item.suppressed]
             self.assertEqual([(item.path, item.line, item.rule_id) for item in found], [])
         example = (HERE / "tessera-mesh-sync.yml.example").read_text(encoding="utf-8")
-        as_yml = [item for item in scan(added(".github/workflows/tessera-mesh-sync.yml", example.splitlines()), allow=allow) if not item.suppressed]
+        as_yml = [item for item in scan(added(".github/workflows/code-gate.yml", example.splitlines()), allow=allow) if not item.suppressed]
         self.assertEqual([(item.line, item.rule_id) for item in as_yml], [])
 
 
