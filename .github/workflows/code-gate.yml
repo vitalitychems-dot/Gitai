@@ -1,0 +1,208 @@
+# Example only. This file is not installed.
+# An admin copies it to .github/workflows/tessera-mesh-sync.yml
+# once the workflow scope is granted. See docs/CODE-GATE.md.
+name: tessera-mesh-sync
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  # push runs on main only; branches get the pull_request run, so a PR
+  # commit is not scanned twice.
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+concurrency:
+  group: tessera-mesh-sync-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+defaults:
+  run:
+    shell: bash
+jobs:
+  gate:
+    name: code-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Base checkout only. Pull request files are not the working tree of
+      # this job, and this job does not run them.
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: github.event_name == 'pull_request' || github.event.before != '0000000000000000000000000000000000000000'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: main
+      - name: Diff code gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          # Exit 1 (findings) and exit 2 (fail closed) both fail the job.
+          ZERO="0000000000000000000000000000000000000000"
+
+          fail() {
+            printf 'failed closed (%s)\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+            exit 2
+          }
+
+          is_sha() {
+            [[ "$1" =~ ^[0-9a-fA-F]{40}$ ]]
+          }
+
+          have_commit() {
+            git cat-file -e "$1^{commit}" >/dev/null 2>&1
+          }
+
+          fetch_sha() {
+            local sha="$1"
+            if have_commit "$sha"; then
+              return 0
+            fi
+            git fetch --no-tags origin "$sha" || return 1
+            have_commit "$sha"
+          }
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            is_sha "$BASE_SHA" || fail "missing diff base"
+            is_sha "$HEAD_SHA" || fail "missing diff base"
+            fetch_sha "$BASE_SHA" || fail "missing diff base"
+            fetch_sha "$HEAD_SHA" || fail "missing diff base"
+          elif [[ "$EVENT_NAME" == "push" ]]; then
+            is_sha "$BEFORE_SHA" || fail "missing diff base"
+            is_sha "$AFTER_SHA" || fail "missing diff base"
+            if [[ "$AFTER_SHA" != "$ZERO" ]]; then
+              fetch_sha "$AFTER_SHA" || fail "missing diff base"
+              if [[ "$BEFORE_SHA" == "$ZERO" ]]; then
+                git fetch --no-tags origin main || fail "missing diff base"
+                have_commit "origin/main" || fail "missing diff base"
+              else
+                fetch_sha "$BEFORE_SHA" || fail "missing diff base"
+              fi
+            fi
+          else
+            fail "missing diff base"
+          fi
+
+          # The gate binary is a trusted blob. Head bytes are data (git show
+          # of a blob, git diff of the range), never a script from the pull
+          # request tree, except the bootstrap below. python3 -I keeps the
+          # script directory off sys.path.
+          # Trusted order: event base, else origin/main. refuse the head copy when origin/main has gate.py.
+          # That holds even if the pull request base lacks the file.
+          # Head copy only when ls-tree of both is empty stdout and exit 0.
+          # Anything else fails closed.
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            GATE_REF="$BASE_SHA"
+            HEAD_REF="$HEAD_SHA"
+          else
+            GATE_REF="$BEFORE_SHA"
+            HEAD_REF="$AFTER_SHA"
+            if [[ "$GATE_REF" == "$ZERO" ]]; then
+              GATE_REF="origin/main"
+            fi
+          fi
+          GATE_DIR="${RUNNER_TEMP}/code-gate-base"
+          mkdir -p "$GATE_DIR"
+          gate_blob_re=$'^100(644|755) blob [0-9a-fA-F]{40}\tscripts/code-gate/gate.py$'
+          allow_blob_re=$'^100(644|755) blob [0-9a-fA-F]{40}\tscripts/code-gate/allowed-hosts.txt$'
+          GATE_SRC=""
+          gate_tree() {
+            local ref="$1"
+            local out rc
+            set +e
+            out="$(git ls-tree "$ref" -- scripts/code-gate/gate.py)"
+            rc=$?
+            set -e
+            if [[ "$rc" -ne 0 ]]; then
+              fail "unparseable file"
+            fi
+            if [[ -z "$out" ]]; then
+              return 1
+            fi
+            if [[ ! "$out" =~ $gate_blob_re ]]; then
+              fail "unparseable file"
+            fi
+            GATE_SRC="$ref"
+            return 0
+          }
+          if ! gate_tree "$GATE_REF"; then
+            if [[ "$GATE_REF" != "origin/main" ]]; then
+              git fetch --no-tags origin main || fail "missing diff base"
+              have_commit "origin/main" || fail "missing diff base"
+              if gate_tree "origin/main"; then
+                printf '%s\n' "Using gate from origin/main." >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+          fi
+          if [[ -z "$GATE_SRC" ]]; then
+            printf '%s\n' "Bootstrap: base and main have no gate; running the head copy." >> "$GITHUB_STEP_SUMMARY"
+            is_sha "$HEAD_REF" || fail "missing diff base"
+            [[ "$HEAD_REF" != "$ZERO" ]] || fail "missing diff base"
+            [[ "$(git cat-file -t "${HEAD_REF}:scripts/code-gate/gate.py" 2>/dev/null || true)" == "blob" ]] || fail "unparseable file"
+            [[ "$(git cat-file -t "${HEAD_REF}:scripts/code-gate/allowed-hosts.txt" 2>/dev/null || true)" == "blob" ]] || fail "unparseable file"
+            GATE_SRC="$HEAD_REF"
+          fi
+          git show "${GATE_SRC}:scripts/code-gate/gate.py" > "$GATE_DIR/gate.py" || fail "unparseable file"
+          set +e
+          ALLOW_OUT="$(git ls-tree "$GATE_SRC" -- scripts/code-gate/allowed-hosts.txt)"
+          ALLOW_RC=$?
+          set -e
+          if [[ "$ALLOW_RC" -ne 0 || -z "$ALLOW_OUT" || ! "$ALLOW_OUT" =~ $allow_blob_re ]]; then
+            fail "unparseable file"
+          fi
+          git show "${GATE_SRC}:scripts/code-gate/allowed-hosts.txt" > "$GATE_DIR/allowed-hosts.txt" || fail "unparseable file"
+          GATE="$GATE_DIR/gate.py"
+
+          set +e
+          RANGE="$(python3 -I "$GATE" --resolve \
+            --event "$EVENT_NAME" \
+            --base "$BASE_SHA" \
+            --head "$HEAD_SHA" \
+            --before "$BEFORE_SHA" \
+            --after "$AFTER_SHA" \
+            --main-ref origin/main \
+            --summary "$GITHUB_STEP_SUMMARY")"
+          rc=$?
+          set -e
+          if [[ "$rc" -ne 0 ]]; then
+            exit "$rc"
+          fi
+
+          if [[ "$RANGE" == "SKIP" ]]; then
+            printf '%s\n' "Branch delete; nothing to scan." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if [[ ! "$RANGE" =~ ^[0-9a-fA-F]{40}\.{2,3}[0-9a-fA-F]{40}$ ]]; then
+            fail "unparseable diff"
+          fi
+
+          python3 -I "$GATE" \
+            --range "$RANGE" \
+            --allowlist "$GATE_DIR/allowed-hosts.txt" \
+            --summary "$GITHUB_STEP_SUMMARY"
+  unit-tests:
+    name: unit-tests
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      - name: Unit tests
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/code-gate -t scripts/code-gate
