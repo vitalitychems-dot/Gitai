@@ -139,6 +139,18 @@ jobs:
           # All-zeros before is a new branch. GATE_REF is already
           # refs/remotes/origin/main, so the head copy is refused when that
           # ref has gate.py. The bootstrap note runs only when it does not.
+          # A push that creates main makes refs/remotes/origin/main the
+          # pushed commit. git rev-parse of that full ref must differ from
+          # AFTER_SHA. Equality fails closed and does not run the head copy.
+          # A tag named origin/main cannot shadow the full ref.
+          # main-create-guard
+          if [[ "$EVENT_NAME" == "push" && "$BEFORE_SHA" == "$ZERO" && "$GATE_REF" == "refs/remotes/origin/main" ]]; then
+            main_sha="$(git rev-parse --verify "refs/remotes/origin/main^{commit}")" || fail "missing diff base"
+            if [[ "$main_sha" == "$AFTER_SHA" ]]; then
+              fail "creating main: no trusted base to diff against; failing closed"
+            fi
+          fi
+          # end main-create-guard
           if ! gate_tree "$GATE_REF"; then
             if [[ "$GATE_REF" != "refs/remotes/origin/main" ]]; then
               git fetch --no-tags origin main || fail "missing diff base"

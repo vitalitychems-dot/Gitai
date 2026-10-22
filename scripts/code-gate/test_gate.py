@@ -17,6 +17,36 @@ from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+_MESH_SCRIPT_NAMES = ("mesh-queue.sh", "mesh-watch.sh")
+
+
+def _mesh_test_action(scripts_present: bool, *, mesh_dir: bool, require_env: bool) -> str:
+    """Run when the scripts exist. Fail when this repo requires them. Otherwise skip."""
+    if scripts_present:
+        return "run"
+    if mesh_dir or require_env:
+        return "fail"
+    return "skip"
+
+
+def _guard_mesh_scripts(test: unittest.TestCase) -> None:
+    missing = [
+        "scripts/" + name
+        for name in _MESH_SCRIPT_NAMES
+        if not (REPO / "scripts" / name).is_file()
+    ]
+    action = _mesh_test_action(
+        not missing,
+        mesh_dir=(REPO / "mesh").is_dir(),
+        require_env=os.environ.get("COLLAB_REQUIRE_MESH_TESTS") == "1",
+    )
+    if action == "run":
+        return
+    if action == "fail":
+        test.fail("required mesh script missing: " + ", ".join(missing))
+    test.skipTest(
+        "scripts/mesh-queue.sh and scripts/mesh-watch.sh are absent from this repo"
+    )
 
 import sys
 
@@ -1388,8 +1418,15 @@ class GateTests(unittest.TestCase):
         self.assertNotIn(long_ver, long_note)
         self.assertIn("***", long_note)
         self.assertNotIn(long_ver, gate.format_summary(scan(added("a.py", [long_line]))))
+        dotted_ver = "v2026.1021"
+        dotted_line = url + "  # code-gate: allow net-public-url note " + dotted_ver
+        dotted_note = scan(added("a.py", [dotted_line]))[0].note
+        self.assertNotIn(dotted_ver, dotted_note)
+        self.assertIn("***", dotted_note)
+        self.assertNotIn(dotted_ver, gate.format_summary(scan(added("a.py", [dotted_line]))))
 
     def test_mesh_scripts_quote_the_api_host_off_the_path(self) -> None:
+        _guard_mesh_scripts(self)
         needle = '"' + https_url("api.github.com") + '""$1"'
         allow = gate.load_allowlist(HERE / "allowed-hosts.txt")
         for name in ("mesh-queue.sh", "mesh-watch.sh"):
@@ -1439,7 +1476,72 @@ class GateTests(unittest.TestCase):
         number = https_url("u:${{ 1 }}@github.com")
         self.assertIn("cred-url-password", rules(added("a.py", [number])))
 
+    def test_secret_shaped_placeholder_words_are_flagged(self) -> None:
+        # Mixed-case digit tokens and token-like non-snake words stay findings.
+        # PASSHq7zR2pLw9 is the PASS-prefixed random form.
+        caught = (
+            "Hunter2_secret",
+            "Hq7zR2pLw9",
+            "PASSHq7zR2pLw9",
+            "Hq7z-R2pL-w9xx",
+        )
+        flagged = (
+            https_url("u:{Hunter2_secret}@github.com"),
+            https_url("u:<Hq7zR2pLw9>@github.com"),
+            https_url("u:${{ Hq7zR2pLw9 }}@github.com"),
+            https_url("u:{PASSHq7zR2pLw9}@github.com"),
+            https_url("u:<Hq7z-R2pL-w9xx>@github.com"),
+        )
+        for line in flagged:
+            with self.subTest(kind="flag"):
+                self.assertIn("cred-url-password", rules(added("a.py", [line])))
+                summary = gate.format_summary(scan(added("a.py", [line])))
+                for word in caught:
+                    self.assertNotIn(word, summary)
+        # Real reference names and plain snake/kebab identifiers are not findings.
+        clean = (
+            https_url("u:{name}@github.com"),
+            https_url("u:<TOKEN>@github.com"),
+            https_url("u:${API_KEY}@github.com"),
+            https_url("u:${{ secrets.X }}@github.com"),
+            https_url("u:${S3_PASSWORD}@github.com"),
+            https_url("u:$S3_PASSWORD@github.com"),
+            https_url("u:${OAUTH2_TOKEN}@github.com"),
+            https_url("u:${K8S_TOKEN}@github.com"),
+            https_url("u:${{ secrets.GH_PAT_V2 }}@github.com"),
+            https_url("u:${{ secrets.TOKEN_2026 }}@github.com"),
+            https_url("u:{api_key_v2}@github.com"),
+            https_url("u:{password2}@github.com"),
+            https_url("u:<base64-token>@github.com"),
+        )
+        for line in clean:
+            with self.subTest(kind="clean"):
+                self.assertEqual(rules(added("a.py", [line])), [])
+
+    def test_mesh_tests_fail_when_this_repo_requires_them(self) -> None:
+        self.assertEqual(
+            _mesh_test_action(True, mesh_dir=True, require_env=False),
+            "run",
+        )
+        self.assertEqual(
+            _mesh_test_action(False, mesh_dir=True, require_env=False),
+            "fail",
+        )
+        self.assertEqual(
+            _mesh_test_action(False, mesh_dir=False, require_env=True),
+            "fail",
+        )
+        self.assertEqual(
+            _mesh_test_action(False, mesh_dir=False, require_env=False),
+            "skip",
+        )
+        self.assertTrue((REPO / "mesh").is_dir())
+        self.assertTrue(
+            all((REPO / "scripts" / name).is_file() for name in _MESH_SCRIPT_NAMES)
+        )
+
     def test_mesh_api_path_must_be_absolute(self) -> None:
+        _guard_mesh_scripts(self)
         marker = "CALLED"
         for name, fn in (("mesh-queue.sh", "get"), ("mesh-watch.sh", "api")):
             text = (REPO / "scripts" / name).read_text(encoding="utf-8")
@@ -1500,6 +1602,98 @@ class GateTests(unittest.TestCase):
         docs = (REPO / "docs" / "CODE-GATE.md").read_text(encoding="utf-8")
         self.assertIn("An all-zeros `before` SHA is a new branch", docs)
         self.assertIn("the head copy is refused when that ref has `gate.py`", docs)
+        guard_at = text.index("# main-create-guard")
+        self.assertLess(guard_at, text.index(call))
+        self.assertLess(text.index("# end main-create-guard"), text.index(note))
+        self.assertIn('git rev-parse --verify "refs/remotes/origin/main^{commit}"', text)
+        self.assertIn('"$main_sha" == "$AFTER_SHA"', text)
+        self.assertIn("fails closed", docs)
+        self.assertIn(note, docs)
+
+    def test_creating_main_fails_closed_when_origin_is_the_push(self) -> None:
+        text = (HERE / "tessera-mesh-sync.yml.example").read_text(encoding="utf-8")
+        start = text.index("# main-create-guard\n")
+        end = text.index("# end main-create-guard\n")
+        guard = text[start:end]
+
+        def run(after_is_main: bool) -> tuple[subprocess.CompletedProcess[str], str]:
+            with tempfile.TemporaryDirectory() as tmp:
+                repo = Path(tmp) / "repo"
+                repo.mkdir()
+                summary = Path(tmp) / "summary"
+                env = os.environ.copy()
+                env.update(
+                    {
+                        "GIT_AUTHOR_NAME": "gate",
+                        "GIT_AUTHOR_EMAIL": "gate@example.com",
+                        "GIT_COMMITTER_NAME": "gate",
+                        "GIT_COMMITTER_EMAIL": "gate@example.com",
+                    }
+                )
+                subprocess.check_call(["git", "init", "-q", "-b", "main"], cwd=repo, env=env)
+                subprocess.check_call(
+                    ["git", "commit", "-q", "--allow-empty", "-m", "base"],
+                    cwd=repo,
+                    env=env,
+                )
+                base = subprocess.check_output(
+                    ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+                ).strip()
+                subprocess.check_call(
+                    ["git", "update-ref", "refs/remotes/origin/main", base],
+                    cwd=repo,
+                )
+                if after_is_main:
+                    after = base
+                else:
+                    subprocess.check_call(
+                        ["git", "commit", "-q", "--allow-empty", "-m", "next"],
+                        cwd=repo,
+                        env=env,
+                    )
+                    after = subprocess.check_output(
+                        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+                    ).strip()
+                script = "\n".join(
+                    [
+                        "set -euo pipefail",
+                        "fail() { printf 'failed closed (%s)\\n' \"$1\" >> \"$GITHUB_STEP_SUMMARY\"; exit 2; }",
+                        "ZERO=" + ZERO,
+                        "EVENT_NAME=push",
+                        "BEFORE_SHA=" + ZERO,
+                        'GATE_REF="refs/remotes/origin/main"',
+                        "AFTER_SHA=" + after,
+                        "GITHUB_STEP_SUMMARY=" + str(summary),
+                        guard,
+                        "printf 'kept prior main\\n'",
+                    ]
+                )
+                proc = subprocess.run(
+                    ["bash", "-c", script],
+                    cwd=repo,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
+                written = summary.read_text(encoding="utf-8") if summary.exists() else ""
+                return proc, written
+
+        created, created_summary = run(True)
+        self.assertEqual(created.returncode, 2, created.stderr + created.stdout)
+        self.assertIn(
+            "failed closed (creating main: no trusted base to diff against; failing closed)",
+            created_summary,
+        )
+        self.assertNotIn("kept prior main", created.stdout)
+        self.assertNotIn(
+            "Bootstrap: base and main have no gate; running the head copy.",
+            created_summary,
+        )
+        prior, prior_summary = run(False)
+        self.assertEqual(prior.returncode, 0, prior.stderr + prior.stdout)
+        self.assertIn("kept prior main", prior.stdout)
+        self.assertEqual(prior_summary, "")
 
     def test_shipped_files_have_no_findings(self) -> None:
         allow = gate.load_allowlist(HERE / "allowed-hosts.txt")

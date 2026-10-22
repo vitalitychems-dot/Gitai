@@ -478,10 +478,20 @@ _SHELL_EMPTY_DEFAULT_RE = re.compile(
 )
 _FSTRING_REF_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_-]*\}")
 _ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_-]*>")
+_PLACEHOLDER_WORD_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 _GH_EXPR_RE = re.compile(r"\$\{\{(.*)\}\}", re.DOTALL)
 # Quotes, numbers, and JSON literals are secrets when they sit in a password.
+# A digit run inside an identifier (`TOKEN_2026`) is not a numeric literal.
 _GH_LITERAL_RE = re.compile(
-    r"""['"`]|(?<![A-Za-z_])(?:\d+(?:\.\d+)?|true|false|null)\b"""
+    r"""['"`]|(?<![A-Za-z0-9_])(?:\d+(?:\.\d+)?|true|false|null)\b"""
+)
+# `secrets.X`, `env.X`, `vars.X`, `github.X`, and `inputs.X` are references.
+_GH_DOTTED_REF_RE = re.compile(
+    r"\b(?:secrets|env|vars|github|inputs)(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
+)
+# Plain snake_case or kebab-case: one letter case, digits inside a word.
+_PLAIN_SNAKE_RE = re.compile(
+    r"(?:[a-z0-9]+(?:[_-][a-z0-9]+)*|[A-Z0-9]+(?:[_-][A-Z0-9]+)*)"
 )
 _URL_PASSWORD_EXACT = frozenset({"changeme", "pass", "password", "xxx"})
 
@@ -758,25 +768,67 @@ def _classify_url(url: str, allow: set[str]) -> str | None:
     return "net-public-url"
 
 
+def _plain_snake_or_kebab(word: str) -> bool:
+    """True for lowercase or uppercase words joined by ``_`` or ``-``.
+
+    Digits may sit inside a word (`api_key_v2`, `password2`, `base64-token`).
+    Mixed case is not plain.
+    """
+    return _PLAIN_SNAKE_RE.fullmatch(word) is not None
+
+
+def _placeholder_word_is_secret(word: str) -> bool:
+    """True when a `{...}` or `<...>` word looks like a secret.
+
+    Plain snake_case and kebab-case names are not secrets. A mixed-case
+    word that contains a digit is. A token-like word that is not plain
+    snake_case or kebab-case is. Shell names and dotted GitHub paths are
+    not passed here.
+    """
+    if _plain_snake_or_kebab(word):
+        return False
+    has_digit = any(ch.isdigit() for ch in word)
+    has_lower = any(ch.islower() for ch in word)
+    has_upper = any(ch.isupper() for ch in word)
+    if has_digit and has_lower and has_upper:
+        return True
+    return _tokenish(word)
+
+
+def _has_secret_placeholder_word(text: str) -> bool:
+    return any(
+        _placeholder_word_is_secret(word) for word in _PLACEHOLDER_WORD_RE.findall(text)
+    )
+
+
 def _github_expression_reference(value: str) -> bool:
-    """True for `${{ secrets.X }}` style references with no quoted or numeric literal."""
+    """True for `${{ secrets.X }}` style references with no quoted or numeric literal.
+
+    Dotted paths under `secrets`, `env`, `vars`, `github`, and `inputs`
+    are references even when the last segment contains a digit. Any other
+    word is checked with the brace/angle rule.
+    """
     match = _GH_EXPR_RE.fullmatch(value)
     if match is None:
         return False
     body = match.group(1)
     if not re.search(r"[A-Za-z_]", body):
         return False
-    return _GH_LITERAL_RE.search(body) is None
+    if _GH_LITERAL_RE.search(body) is not None:
+        return False
+    stripped = _GH_DOTTED_REF_RE.sub(" ", body)
+    return not _has_secret_placeholder_word(stripped)
 
 
 def _template_password(value: str) -> bool:
     """True when the whole password is a reference, not a literal secret.
 
-    `${IDENT}` and `$IDENT` are references. `${VAR:-}` with an empty default
-    is a reference. `${VAR:-literal}` is not. `${{ ... }}` is a reference
-    only when the expression has no quotes and no literals (`secrets.X`,
-    `env.X`, `github.token`). `{name}` is a reference only for an
-    identifier-like name.
+    `$IDENT`, `${IDENT}`, and an empty `${VAR:-}` are references. The
+    placeholder-word check is not applied to those names, or to a name in
+    any `${IDENT:-...}` default form. `${VAR:-literal}` is not a reference.
+    `${{ ... }}` is a reference when the expression has no quotes and no
+    literals. `{name}` is a reference only for an identifier-like name that
+    is not a mixed-case digit token or a non-snake token.
     """
     if _SHELL_IDENT_RE.fullmatch(value) is not None:
         return True
@@ -784,7 +836,9 @@ def _template_password(value: str) -> bool:
         return True
     if _github_expression_reference(value):
         return True
-    return _FSTRING_REF_RE.fullmatch(value) is not None
+    if _FSTRING_REF_RE.fullmatch(value) is None:
+        return False
+    return not _placeholder_word_is_secret(value[1:-1])
 
 
 def _url_password_placeholder(value: str) -> bool:
@@ -792,13 +846,17 @@ def _url_password_placeholder(value: str) -> bool:
 
     Exact words only: changeme, pass, password, xxx. A string of only
     asterisks. An angle-bracket word whose inside is an identifier
-    (`<password>`, `<my-token>`). `<...>` and any other inside are not.
+    (`<password>`, `<my-token>`, `<base64-token>`). `<...>` and any other
+    inside are not. A mixed-case word with a digit, or a token-like word
+    that is not snake_case or kebab-case, is not a stand-in.
     """
     if value.lower() in _URL_PASSWORD_EXACT:
         return True
     if value and all(ch == "*" for ch in value):
         return True
-    return _ANGLE_PLACEHOLDER_RE.fullmatch(value) is not None
+    if _ANGLE_PLACEHOLDER_RE.fullmatch(value) is None:
+        return False
+    return not _placeholder_word_is_secret(value[1:-1])
 
 
 def _url_password_span(url: str) -> tuple[int, int] | None:
@@ -810,8 +868,13 @@ def _url_password_span(url: str) -> tuple[int, int] | None:
     `{identifier}`), or an exact placeholder (`changeme`, `pass`,
     `password`, `xxx`, asterisks, `<identifier>`). A `${VAR:-literal}`
     default, a quoted or numeric GitHub expression, and any other
-    `{...}` or `<...>` are flagged. Any other password is flagged,
-    including when the host is allowlisted.
+    `{...}` or `<...>` are flagged. Inside `{...}` and `<...>`, plain
+    snake_case and kebab-case names are not flagged. A mixed-case word
+    with a digit, or a token-like word that is not snake_case or
+    kebab-case, is flagged. `$IDENT`, `${IDENT}`, and `${IDENT:-...}`
+    are not checked that way. Dotted `secrets.`, `env.`, `vars.`,
+    `github.`, and `inputs.` paths are not checked that way. Any other
+    password is flagged, including when the host is allowlisted.
     The secret itself is not returned.
     """
     cleaned = _trim_url(url)
@@ -1076,9 +1139,10 @@ def _tokenish(fragment: str) -> bool:
 
 
 # Short version words and well-known names mix a letter and a digit.
-# A long component such as v20261021 is masked like any other matched token.
+# Each version part is at most three digits, and an RFC number is at most
+# five, so v2026.1021 and v20261021 are masked like any other matched token.
 _BENIGN_MIXED_RE = re.compile(
-    r"(?i)^(?:v\d{1,4}(?:\.\d{1,4})*|ipv[46]|rfc\d+)$"
+    r"(?i)^(?:v\d{1,3}(?:\.\d{1,3})*|ipv[46]|rfc\d{1,5})$"
 )
 
 
@@ -1087,8 +1151,9 @@ def _looks_secret(fragment: str) -> bool:
 
     Long token-like words are included. A shorter word that mixes a letter
     and a digit is included even when it is not the matched value.
-    Short version words (`v1.2`, each part at most four digits) and
-    well-known words (`ipv4`, `rfc2606`) are not. `v20261021` is.
+    Short version words (`v1.2`, each part at most three digits) and
+    well-known words (`ipv4`, `rfc2606`, an RFC number of at most five
+    digits) are not. `v2026.1021` and `v20261021` are.
     """
     if _tokenish(fragment):
         return True
