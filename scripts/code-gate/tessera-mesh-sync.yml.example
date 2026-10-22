@@ -84,7 +84,7 @@ jobs:
               fetch_sha "$AFTER_SHA" || fail "missing diff base"
               if [[ "$BEFORE_SHA" == "$ZERO" ]]; then
                 git fetch --no-tags origin main || fail "missing diff base"
-                have_commit "origin/main" || fail "missing diff base"
+                have_commit "refs/remotes/origin/main" || fail "missing diff base"
               else
                 fetch_sha "$BEFORE_SHA" || fail "missing diff base"
               fi
@@ -97,7 +97,8 @@ jobs:
           # of a blob, git diff of the range), never a script from the pull
           # request tree, except the bootstrap below. python3 -I keeps the
           # script directory off sys.path.
-          # Trusted order: event base, else origin/main. refuse the head copy when origin/main has gate.py.
+          # Trusted order: event base, else refs/remotes/origin/main. refuse the head copy when origin/main has gate.py.
+          # The full ref is required so a tag named origin/main cannot shadow the remote.
           # That holds even if the pull request base lacks the file.
           # Head copy only when ls-tree of both is empty stdout and exit 0.
           # Anything else fails closed.
@@ -108,7 +109,7 @@ jobs:
             GATE_REF="$BEFORE_SHA"
             HEAD_REF="$AFTER_SHA"
             if [[ "$GATE_REF" == "$ZERO" ]]; then
-              GATE_REF="origin/main"
+              GATE_REF="refs/remotes/origin/main"
             fi
           fi
           GATE_DIR="${RUNNER_TEMP}/code-gate-base"
@@ -135,11 +136,14 @@ jobs:
             GATE_SRC="$ref"
             return 0
           }
+          # All-zeros before is a new branch. GATE_REF is already
+          # refs/remotes/origin/main, so the head copy is refused when that
+          # ref has gate.py. The bootstrap note runs only when it does not.
           if ! gate_tree "$GATE_REF"; then
-            if [[ "$GATE_REF" != "origin/main" ]]; then
+            if [[ "$GATE_REF" != "refs/remotes/origin/main" ]]; then
               git fetch --no-tags origin main || fail "missing diff base"
-              have_commit "origin/main" || fail "missing diff base"
-              if gate_tree "origin/main"; then
+              have_commit "refs/remotes/origin/main" || fail "missing diff base"
+              if gate_tree "refs/remotes/origin/main"; then
                 printf '%s\n' "Using gate from origin/main." >> "$GITHUB_STEP_SUMMARY"
               fi
             fi
@@ -170,7 +174,7 @@ jobs:
             --head "$HEAD_SHA" \
             --before "$BEFORE_SHA" \
             --after "$AFTER_SHA" \
-            --main-ref origin/main \
+            --main-ref refs/remotes/origin/main \
             --summary "$GITHUB_STEP_SUMMARY")"
           rc=$?
           set -e

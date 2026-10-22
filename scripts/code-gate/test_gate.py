@@ -1287,6 +1287,12 @@ class GateTests(unittest.TestCase):
         for kind in ("opened", "synchronize", "reopened", "ready_for_review", "edited"):
             self.assertIn(kind, text)
         self.assertIn("refuse the head copy when origin/main has gate.py", text)
+        self.assertIn("refs/remotes/origin/main", text)
+        self.assertNotIn('have_commit "origin/main"', text)
+        self.assertNotIn('GATE_REF="origin/main"', text)
+        self.assertNotIn('gate_tree "origin/main"', text)
+        self.assertNotIn("--main-ref origin/main", text)
+        self.assertIn("--main-ref refs/remotes/origin/main", text)
         self.assertIn("Using gate from origin/main.", text)
         self.assertIn("Bootstrap: base and main have no gate; running the head copy.", text)
         self.assertLess(
@@ -1314,6 +1320,186 @@ class GateTests(unittest.TestCase):
         self.assertIn("required status check", docs)
         self.assertIn("exits 0", docs)
         self.assertNotIn(join("TESSERA_", "ENABLE"), docs)
+
+    def test_template_urls_are_not_public_and_bypasses_stay_flagged(self) -> None:
+        # The `${...}` alternative has to run before the class that matches `$`.
+        expr = "${{ secrets." + "GITHUB_TOKEN }}"
+        github_expr = https_url("x-access-token:" + expr + "@github.com/org/repo")
+        shell_user = https_url("user:${TOKEN}@github.com")
+        bare_user = "user:${TOKEN}@github.com"
+        fstring = 'f"' + https_url("{token}@github.com") + '"'
+        for line in (github_expr, shell_user, bare_user, fstring):
+            with self.subTest(line=line[:24]):
+                self.assertNotIn("net-public-url", rules(added("a.py", [line])))
+                self.assertNotIn("cred-url-password", rules(added("a.py", [line])))
+        for line in (github_expr, shell_user, fstring):
+            match = gate._PATS["net-url"].search(line)
+            self.assertIsNotNone(match)
+            assert match is not None
+            self.assertIn("@github.com", match.group(0))
+            self.assertEqual(gate._url_host(match.group(0)), "github.com")
+        self.assertIsNone(gate._PATS["net-url"].search(bare_user))
+        for host in ("${HOST}.localhost/", "exfil${''}.attacker.com"):
+            with self.subTest(host=host):
+                self.assertEqual(
+                    rules(added("a.py", [https_url(host)])),
+                    ["net-public-url"],
+                )
+
+    def test_url_password_placeholders_are_not_findings(self) -> None:
+        placeholders = (
+            "changeme",
+            "***",
+            "pass",
+            "password",
+            "xxx",
+            "<password>",
+            "<my-token>",
+        )
+        for password in placeholders:
+            line = https_url("user:" + password + "@github.com/a")
+            with self.subTest(password=password):
+                self.assertEqual(rules(added("a.py", [line])), [])
+        dotted = https_url("user:<...>@github.com/a")
+        self.assertEqual(rules(added("a.py", [dotted])), ["cred-url-password"])
+        public = https_url("user:changeme@evil.example.com/a")
+        self.assertEqual(rules(added("a.py", [public])), ["net-public-url"])
+        real = https_url("user:" + join("s3", "cret") + "@github.com/a")
+        self.assertEqual(rules(added("a.py", [real])), ["cred-url-password"])
+        longer = https_url("user:password1@github.com/a")
+        self.assertIn("cred-url-password", rules(added("a.py", [longer])))
+
+    def test_reason_keeps_version_and_well_known_words(self) -> None:
+        url = http_url("evil.example.com/a")
+        for word in ("v1.2", "ipv4", "rfc2606"):
+            line = url + "  # code-gate: allow net-public-url note " + word
+            note = scan(added("a.py", [line]))[0].note
+            with self.subTest(word=word):
+                self.assertIn(word, note)
+                self.assertNotIn("***", note)
+        secret = join("s3", "cret")
+        secret_line = url + "  # code-gate: allow net-public-url note " + secret
+        secret_note = scan(added("a.py", [secret_line]))[0].note
+        self.assertNotIn(secret, secret_note)
+        self.assertIn("***", secret_note)
+        long_ver = "v20261021"
+        long_line = url + "  # code-gate: allow net-public-url note " + long_ver
+        long_note = scan(added("a.py", [long_line]))[0].note
+        self.assertNotIn(long_ver, long_note)
+        self.assertIn("***", long_note)
+        self.assertNotIn(long_ver, gate.format_summary(scan(added("a.py", [long_line]))))
+
+    def test_mesh_scripts_quote_the_api_host_off_the_path(self) -> None:
+        needle = '"' + https_url("api.github.com") + '""$1"'
+        allow = gate.load_allowlist(HERE / "allowed-hosts.txt")
+        for name in ("mesh-queue.sh", "mesh-watch.sh"):
+            text = (REPO / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn(needle, text)
+            lines = [line.strip() for line in text.splitlines() if "api.github.com" in line]
+            self.assertEqual(rules(added("scripts/" + name, lines), allow=allow), [])
+        glued = https_url("api.github.com$1")
+        self.assertEqual(rules(added("a.sh", [glued])), ["net-public-url"])
+
+    def test_literal_inside_template_password_is_flagged(self) -> None:
+        # A non-identifier literal. Identifier-like references stay clean.
+        literal = join("p@", "ss")
+        flagged = [
+            https_url("u:${PASS:-" + literal + "}@github.com"),
+            https_url("u:${{ '" + literal + "' }}@github.com"),
+            https_url("u:{" + literal + "}@github.com"),
+            https_url("u:${" + literal + "}@github.com"),
+            https_url("u:<" + literal + ">@github.com"),
+        ]
+        for line in flagged:
+            with self.subTest(kind="flag"):
+                found = rules(added("a.py", [line]))
+                self.assertIn("cred-url-password", found)
+                self.assertNotIn("net-public-url", found)
+                self.assertNotIn(literal, gate.format_summary(scan(added("a.py", [line]))))
+                match = gate._PATS["net-url"].search(line)
+                self.assertIsNotNone(match)
+                assert match is not None
+                self.assertIn("@github.com", match.group(0))
+        clean = [
+            https_url("u:${TOKEN}@github.com"),
+            https_url("u:${PASS:-}@github.com"),
+            https_url("u:${{ secrets.GITHUB_TOKEN }}@github.com"),
+            https_url("u:${{ env.TOKEN }}@github.com"),
+            https_url("u:${{ github.token }}@github.com"),
+            https_url("u:{token}@github.com"),
+            https_url("u:{my-token}@github.com"),
+            https_url("u:<password>@github.com"),
+        ]
+        for line in clean:
+            with self.subTest(kind="clean"):
+                self.assertNotIn("cred-url-password", rules(added("a.py", [line])))
+                self.assertNotIn("net-public-url", rules(added("a.py", [line])))
+        quoted = https_url("u:${{ secrets.TOKEN || 'x' }}@github.com")
+        self.assertIn("cred-url-password", rules(added("a.py", [quoted])))
+        number = https_url("u:${{ 1 }}@github.com")
+        self.assertIn("cred-url-password", rules(added("a.py", [number])))
+
+    def test_mesh_api_path_must_be_absolute(self) -> None:
+        marker = "CALLED"
+        for name, fn in (("mesh-queue.sh", "get"), ("mesh-watch.sh", "api")):
+            text = (REPO / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn('case "$1" in', text)
+            self.assertIn("/*)", text)
+            self.assertIn("return 1", text)
+            start = text.index(fn + "(){")
+            # The function ends at the first line that is only `}`.
+            rest = text[start:]
+            end = rest.index("\n}")
+            fn_src = rest[: end + 2]
+            script = "\n".join(
+                [
+                    "set +e",
+                    "set -u",
+                    "mark=$(mktemp)",
+                    "CALLF=$(mktemp)",
+                    "curl() { echo " + marker + " >> \"$mark\"; }",
+                    "hdr=()",
+                    fn_src,
+                    fn + " '@evil.example'",
+                    "echo RC:$?",
+                    fn + " 'https://evil.example/x'",
+                    "echo RC:$?",
+                    "echo BAD:$(wc -l < \"$mark\" | tr -d ' ')",
+                    ": > \"$mark\"",
+                    fn + " '/repos/acme/widgets/pulls/1'",
+                    "echo RC:$?",
+                    "echo GOOD:$(wc -l < \"$mark\" | tr -d ' ')",
+                ]
+            )
+            proc = subprocess.run(
+                ["bash", "-c", script],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
+            lines = [line for line in proc.stdout.splitlines() if line]
+            self.assertEqual(lines[0], "RC:1")
+            self.assertEqual(lines[1], "RC:1")
+            self.assertEqual(lines[2], "BAD:0")
+            self.assertEqual(lines[4], "GOOD:1")
+
+    def test_zero_before_push_uses_origin_main_gate(self) -> None:
+        text = (HERE / "tessera-mesh-sync.yml.example").read_text(encoding="utf-8")
+        forced = (
+            'if [[ "$EVENT_NAME" == "push" && "$BEFORE_SHA" == "$ZERO" '
+            '&& "$AFTER_SHA" != "$ZERO" ]]; then'
+        )
+        self.assertNotIn(forced, text)
+        assign = 'if [[ "$GATE_REF" == "$ZERO" ]]; then\n              GATE_REF="refs/remotes/origin/main"'
+        self.assertIn(assign, text)
+        call = 'if ! gate_tree "$GATE_REF"; then'
+        self.assertLess(text.index(assign), text.index(call))
+        note = "Bootstrap: base and main have no gate; running the head copy."
+        self.assertLess(text.index(call), text.index(note))
+        docs = (REPO / "docs" / "CODE-GATE.md").read_text(encoding="utf-8")
+        self.assertIn("An all-zeros `before` SHA is a new branch", docs)
+        self.assertIn("the head copy is refused when that ref has `gate.py`", docs)
 
     def test_shipped_files_have_no_findings(self) -> None:
         allow = gate.load_allowlist(HERE / "allowed-hosts.txt")

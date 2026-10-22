@@ -342,8 +342,10 @@ def _compile() -> dict[str, re.Pattern[str]]:
         + aws_names
         + r")\b\s*[:=]\s*['\"]?([A-Za-z0-9/+=]{40})(?![A-Za-z0-9/+=])"
     )
-    # `}` ends a URL, except inside `${...}`, so a template password is part
-    # of the URL instead of cutting the host off before `@`.
+    # `$` and `{` are in the character class, so a later template alternative
+    # never runs. These forms come first so the host after `@` stays in the
+    # match. The password check, not this pattern, decides which of them are
+    # placeholders. `}` outside those forms still ends the URL.
     url = (
         r"(?i)\b(?:"
         + "ht"
@@ -351,8 +353,11 @@ def _compile() -> dict[str, re.Pattern[str]]:
         + "ws"
         + "s?"
         + r")://(?:"
-        + r"[^\s<>'\"`)}]"
+        + r"\$\{\{[^}]*\}\}"
         + r"|\$\{[^}]*\}"
+        + r"|\{[^}]*\}"
+        + r"|<[^>\s]*>"
+        + r"|[^\s<>'\"`)}]"
         + r")+"
     )
     scheme_alt = "|".join(re.escape(name) for name in _DB_SCHEMES)
@@ -460,7 +465,25 @@ _IPV6_RE = re.compile(
     r"(?![0-9A-Za-z:])"
 )
 _HOST_RE = re.compile(r"[a-z0-9.-]+\.[a-z]{2,}")
-_REF_RE = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[^}]+\})")
+# `$NAME`, `${VAR}`, and `${{ ... }}`. `{name}` is separate: a prefix match
+# on `{` would hide a real secret that merely starts with one. This pattern
+# is only a prefix skip for generic assignments. URL passwords use the
+# tighter checks below, so a default or a quoted literal is not skipped.
+_REF_RE = re.compile(
+    r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]*\}\}|\{[^}]+\})"
+)
+_SHELL_IDENT_RE = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})")
+_SHELL_EMPTY_DEFAULT_RE = re.compile(
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?::?-|=)\}"
+)
+_FSTRING_REF_RE = re.compile(r"\{[A-Za-z_][A-Za-z0-9_-]*\}")
+_ANGLE_PLACEHOLDER_RE = re.compile(r"<[A-Za-z_][A-Za-z0-9_-]*>")
+_GH_EXPR_RE = re.compile(r"\$\{\{(.*)\}\}", re.DOTALL)
+# Quotes, numbers, and JSON literals are secrets when they sit in a password.
+_GH_LITERAL_RE = re.compile(
+    r"""['"`]|(?<![A-Za-z_])(?:\d+(?:\.\d+)?|true|false|null)\b"""
+)
+_URL_PASSWORD_EXACT = frozenset({"changeme", "pass", "password", "xxx"})
 
 
 def _safe_rel(path: str) -> str:
@@ -735,12 +758,61 @@ def _classify_url(url: str, allow: set[str]) -> str | None:
     return "net-public-url"
 
 
+def _github_expression_reference(value: str) -> bool:
+    """True for `${{ secrets.X }}` style references with no quoted or numeric literal."""
+    match = _GH_EXPR_RE.fullmatch(value)
+    if match is None:
+        return False
+    body = match.group(1)
+    if not re.search(r"[A-Za-z_]", body):
+        return False
+    return _GH_LITERAL_RE.search(body) is None
+
+
+def _template_password(value: str) -> bool:
+    """True when the whole password is a reference, not a literal secret.
+
+    `${IDENT}` and `$IDENT` are references. `${VAR:-}` with an empty default
+    is a reference. `${VAR:-literal}` is not. `${{ ... }}` is a reference
+    only when the expression has no quotes and no literals (`secrets.X`,
+    `env.X`, `github.token`). `{name}` is a reference only for an
+    identifier-like name.
+    """
+    if _SHELL_IDENT_RE.fullmatch(value) is not None:
+        return True
+    if _SHELL_EMPTY_DEFAULT_RE.fullmatch(value) is not None:
+        return True
+    if _github_expression_reference(value):
+        return True
+    return _FSTRING_REF_RE.fullmatch(value) is not None
+
+
+def _url_password_placeholder(value: str) -> bool:
+    """True for a stand-in password, not a real-looking one.
+
+    Exact words only: changeme, pass, password, xxx. A string of only
+    asterisks. An angle-bracket word whose inside is an identifier
+    (`<password>`, `<my-token>`). `<...>` and any other inside are not.
+    """
+    if value.lower() in _URL_PASSWORD_EXACT:
+        return True
+    if value and all(ch == "*" for ch in value):
+        return True
+    return _ANGLE_PLACEHOLDER_RE.fullmatch(value) is not None
+
+
 def _url_password_span(url: str) -> tuple[int, int] | None:
     """Offsets of a URL password inside `url`.
 
-    None means do not flag: no password, an empty password, or a password
-    that is only a `$VAR` or `${VAR}` template. Any other password is flagged,
-    including when the host is allowlisted. The secret itself is not returned.
+    None means do not flag: no password, an empty password, a plain
+    reference (`$VAR`, `${IDENT}`, an empty `${VAR:-}`, a quote-free
+    `${{ secrets.X }}` / `${{ env.X }}` / `${{ github.token }}`, or
+    `{identifier}`), or an exact placeholder (`changeme`, `pass`,
+    `password`, `xxx`, asterisks, `<identifier>`). A `${VAR:-literal}`
+    default, a quoted or numeric GitHub expression, and any other
+    `{...}` or `<...>` are flagged. Any other password is flagged,
+    including when the host is allowlisted.
+    The secret itself is not returned.
     """
     cleaned = _trim_url(url)
     scheme, sep, rest = cleaned.partition("://")
@@ -762,7 +834,9 @@ def _url_password_span(url: str) -> tuple[int, int] | None:
     if password == "":
         return None
     decoded = unquote(password)
-    if _REF_RE.fullmatch(password) or _REF_RE.fullmatch(decoded):
+    if _template_password(password) or _template_password(decoded):
+        return None
+    if _url_password_placeholder(password) or _url_password_placeholder(decoded):
         return None
     start = len(scheme) + len(sep) + colon + 1
     end = start + len(password)
@@ -1001,16 +1075,27 @@ def _tokenish(fragment: str) -> bool:
     return has_alpha and has_digit and _shannon(core) >= 3.0
 
 
+# Short version words and well-known names mix a letter and a digit.
+# A long component such as v20261021 is masked like any other matched token.
+_BENIGN_MIXED_RE = re.compile(
+    r"(?i)^(?:v\d{1,4}(?:\.\d{1,4})*|ipv[46]|rfc\d+)$"
+)
+
+
 def _looks_secret(fragment: str) -> bool:
     """True when a reason word must not be printed.
 
     Long token-like words are included. A shorter word that mixes a letter
     and a digit is included even when it is not the matched value.
+    Short version words (`v1.2`, each part at most four digits) and
+    well-known words (`ipv4`, `rfc2606`) are not. `v20261021` is.
     """
     if _tokenish(fragment):
         return True
     core = fragment.strip("'\"`()[]{}<>,;:.")
     if len(core) < 4:
+        return False
+    if _BENIGN_MIXED_RE.fullmatch(core):
         return False
     return any(ch.isalpha() for ch in core) and any(ch.isdigit() for ch in core)
 
