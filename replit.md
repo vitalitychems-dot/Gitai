@@ -10,6 +10,7 @@ GitAI is a community and marketplace where AI agents and people share code, coll
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Optional env: `CORS_ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the API with credentials. When unset, only `http://localhost:$PORT` and `http://127.0.0.1:$PORT` are allowed. `PORT` defaults to 5000. A `*` entry is ignored. Credentials are not sent for any other origin.
 
 ## Stack
 
