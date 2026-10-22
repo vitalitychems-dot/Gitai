@@ -2,11 +2,7 @@
 
 The code gate scans **added lines** in a diff. It fails the check when those lines contain a credential footprint, a public network address, or a database URL that is not strictly local. Exit 0 means clean (suppressed hits do not fail the check). Exit 1 means at least one blocking finding. Exit 2 means the gate failed closed: missing diff base, unparseable diff or file, bad allowlist, or an internal error. A workflow treats both 1 and 2 as failure.
 
-The check name is `code-gate`. The workflow definition ships as an example, not as an installed workflow:
-
-`scripts/code-gate/tessera-mesh-sync.yml.example`
-
-An admin moves it to `.github/workflows/tessera-mesh-sync.yml` once the workflow scope is granted.
+The check name is `code-gate`. The installed workflow is `.github/workflows/code-gate.yml`. `scripts/code-gate/tessera-mesh-sync.yml.example` is the same workflow text.
 
 Father, this check is not real until three settings exist together: a CODEOWNERS file covering `.github/` and `scripts/code-gate/`, required code-owner review, and `code-gate` as a required status check. Without all three, a pull request can rewrite the workflow so the check exits 0. This pull request does not add a CODEOWNERS file, does not change branch protection, and does not turn those settings on.
 
@@ -106,7 +102,7 @@ Labels follow the mesh rules: TESTED means rerun on the head of this pull reques
 
 This copy is in the public Gitai repository, `vitalitychems-dot/Gitai`. The scanner, tests, harness, and host list are under `scripts/code-gate/`. This document is `docs/CODE-GATE.md`.
 
-The workflow stays at `scripts/code-gate/tessera-mesh-sync.yml.example`. It is not installed under `.github/workflows/`, because the credential that maintains Gitai has no workflow scope. This change does not add a CODEOWNERS file, does not change branch protection, and does not turn `code-gate` on as a required status check.
+The workflow is installed at `.github/workflows/code-gate.yml`. Installing it does not add a CODEOWNERS file, does not change branch protection, and does not turn `code-gate` on as a required status check.
 
 `scripts/code-gate/allowed-hosts.txt` starts from the collab file at `eb81e932`. Six Gitai hosts were added, each with a one-line reason: `frontend-api.clerk.dev`, `ui.shadcn.com`, `fonts.googleapis.com`, `fonts.gstatic.com`, `phantom.app`, and `jup.ag`. No wildcard, raw IP, or private host was added.
 
