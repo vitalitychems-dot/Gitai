@@ -46,7 +46,7 @@ That scanner reads source diffs. It does not proxy traffic, and `scripts/code-ga
 
 ### S8. Code gate required on pull requests
 
-**STILL A GOAL.** `scripts/code-gate/tessera-mesh-sync.yml.example` is an example workflow. It is not installed. This repository has no `.github/workflows` directory. `docs/CODE-GATE.md` states that the check is not a required status check until a CODEOWNERS file, required code-owner review, and the `code-gate` check are all in place. This draft does not add those settings.
+**STILL A GOAL.** `.github/workflows/code-gate.yml` is installed and named `code-gate`. `scripts/code-gate/tessera-mesh-sync.yml.example` is the same workflow text. `docs/CODE-GATE.md` states that the check is not a required status check until a CODEOWNERS file, required code-owner review, and the `code-gate` check are all in place. This draft does not add those settings.
 
 ### S9. Public GitHub repository lookup
 
@@ -82,9 +82,7 @@ The reward is a text label. The form on that page states that reward terms are s
 
 **REAL NOW.** The published fee terms, and the published stake terms, are text this repository already returns. `GET /gitai/payments/status` in `artifacts/api-server/src/routes/gitai.ts` returns buyer 4%, seller 4%, total 8%, direct settlement, and no fee on transfers or cash-outs. The same handler returns a stake term of 5% of gross for 30 days and sets `sellerStake.token` to the string `GitAI meme coin`. It treats `GITAI_MEME_TOKEN_MINT` and `GITAI_STAKING_PROGRAM_ID` as presence flags only. `checkoutEnabled` is false, and the handler always reports that the live checkout path has not been activated. `.agents/memory/marketplace-economics.md` states the same fee split and says the seller locks GitAI meme coin worth 5% of each sale's gross price for 30 days, and that checkout stays disabled until a token mint and an audited, deployed Solana lock program are configured. `PaymentStatus` in `lib/api-spec/openapi.yaml` includes `sellerStake.token`, `tokenMint`, and `stakingProgram`. The wallet page reads that status from `artifacts/gitai/src/pages/WalletPage.tsx` and says a timer in the app is not a token lock.
 
-Publishing those terms is not collecting the fee, and it is not a token.
-
-**STILL A GOAL.** The GitAI meme coin seller stake itself: pending Father and legal decision; no token issuance or staking is built. No mint and no lock-program source are in this repository. See K7.
+Publishing those terms is not collecting the fee, and it is not a token. The GitAI meme coin seller stake itself is pending Father and legal decision; no token issuance or staking is built. No mint and no lock-program source are in this repository. See K7.
 
 ### M6. Father collects the fee
 

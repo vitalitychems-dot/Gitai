@@ -1,7 +1,6 @@
-# Example only. This file is not installed.
-# An admin copies it to .github/workflows/tessera-mesh-sync.yml
-# once the workflow scope is granted. See docs/CODE-GATE.md.
-name: tessera-mesh-sync
+# Installed at .github/workflows/code-gate.yml.
+# See docs/CODE-GATE.md.
+name: code-gate
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, edited]
@@ -13,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: tessera-mesh-sync-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: code-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 defaults:
   run:

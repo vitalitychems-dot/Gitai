@@ -7,6 +7,7 @@ import { createCorsMiddleware } from "./cors-allowlist.ts";
 type CorsHeaders = {
   allowOrigin: string | null;
   allowCredentials: string | null;
+  vary: string | null;
 };
 
 async function probe(env: NodeJS.ProcessEnv, origin: string): Promise<CorsHeaders> {
@@ -28,6 +29,7 @@ async function probe(env: NodeJS.ProcessEnv, origin: string): Promise<CorsHeader
     return {
       allowOrigin: response.headers.get("access-control-allow-origin"),
       allowCredentials: response.headers.get("access-control-allow-credentials"),
+      vary: response.headers.get("vary"),
     };
   } finally {
     await new Promise<void>((resolve, reject) => {
@@ -62,4 +64,73 @@ test("a star origin is not reflected when credentials are on", async () => {
   assert.equal(headers.allowOrigin, null);
   assert.notEqual(headers.allowOrigin, "*");
   assert.equal(headers.allowCredentials, null);
+});
+
+test("a rejected origin still varies on Origin", async () => {
+  const headers = await probe({}, "https://evil.example");
+  assert.equal(headers.allowOrigin, null);
+  assert.equal(headers.allowCredentials, null);
+  assert.equal(headers.vary, "Origin");
+});
+
+test("a literal null allowlist entry is not reflected", async () => {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message?: unknown) => {
+    warnings.push(String(message));
+  };
+  try {
+    const headers = await probe({ CORS_ALLOWED_ORIGINS: "null" }, "null");
+    assert.equal(headers.allowOrigin, null);
+    assert.equal(headers.allowCredentials, null);
+    assert.equal(headers.vary, "Origin");
+    assert.equal(warnings.includes("dropped CORS allowlist entry null"), true);
+  } finally {
+    console.warn = original;
+  }
+});
+
+test("a trailing-slash allowlist entry matches the browser origin", async () => {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message?: unknown) => {
+    warnings.push(String(message));
+  };
+  try {
+    const headers = await probe(
+      { CORS_ALLOWED_ORIGINS: "https://agents.example/" },
+      "https://agents.example",
+    );
+    assert.equal(headers.allowOrigin, "https://agents.example");
+    assert.equal(headers.allowCredentials, "true");
+    assert.equal(headers.vary, "Origin");
+    assert.equal(
+      warnings.includes("normalized CORS allowlist entry https://agents.example/ to https://agents.example"),
+      true,
+    );
+  } finally {
+    console.warn = original;
+  }
+});
+
+test("an uppercase allowlist entry matches the browser origin", async () => {
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = (message?: unknown) => {
+    warnings.push(String(message));
+  };
+  try {
+    const headers = await probe(
+      { CORS_ALLOWED_ORIGINS: "HTTPS://Agents.Example" },
+      "https://agents.example",
+    );
+    assert.equal(headers.allowOrigin, "https://agents.example");
+    assert.equal(headers.allowCredentials, "true");
+    assert.equal(
+      warnings.includes("normalized CORS allowlist entry HTTPS://Agents.Example to https://agents.example"),
+      true,
+    );
+  } finally {
+    console.warn = original;
+  }
 });
