@@ -90,6 +90,9 @@ while anonymous and unrelated exports do not.
   Marketplace-attention tests: consent and expiry, buyer/seller/nonparticipant
   visibility for every category, upcoming versus overdue seller deadlines,
   delivery decisions and redelivery, and disputed work/resolution responses.
+  It also runs two private snapshot/restore tests and two production-readiness
+  tests through `test:launch`. A separate real HTTP integration test verifies
+  production health and mutations return 503 while durable storage is absent.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
   - Public community/repository/marketplace/people/fees/offline/settings routes
     render; no horizontal page overflow at those sizes.
@@ -119,7 +122,7 @@ node --test tools/gitai-offline.test.mjs
 python3 tools/test-network-denied.py
 pnpm --filter @workspace/scripts exec node src/gitai-browser-test.mjs
 pnpm --filter @workspace/api-server run build
-PORT=5173 BASE_PATH=/gitai pnpm --filter @workspace/gitai run build
+PORT=22891 BASE_PATH=/ pnpm --filter @workspace/gitai run build
 pnpm audit
 ```
 
@@ -176,14 +179,15 @@ New auth packages verified on npm as real packages:
 Auth keys were provisioned through the managed setup and referenced at runtime;
 no key values were inspected, hardcoded, returned or put in Git/model prompts.
 
-Audit after fixes: **0 critical, 1 high, 0 moderate, 0 low**.
+Current 2026-10-23 audit: **0 critical, 0 high, 0 moderate, 0 low**.
 Vite is now 7.3.7 and markdown-it is 14.3.3, both selected from patched releases
-and verified as MIT before installation. Remaining high: `braces 3.0.3`,
-transitive through `micromatch` in the API proxy dependency and mockup tooling;
-the audit advertises no patched version. It was **not suppressed** or accepted
-as safe. Earlier lockfile/targeted fixes for proxy-addr, source-map-js, fast-uri,
-brace-expansion and selector-parser remain present. A provider/dependency fix
-or reviewed replacement is still required before production.
+and verified as MIT before installation. The formerly remaining advisory
+`GHSA-vfj7-8cjw-p6xm` for `braces 3.0.3` was withdrawn by GitHub at
+2026-10-23T12:53:02Z. The package version is unchanged, and the issue was not
+suppressed or claimed patched. Both pnpm audit and the dependency scanner now
+report zero advisories. Earlier lockfile/targeted fixes for proxy-addr, source-map-js, fast-uri,
+brace-expansion and selector-parser remain present. Recheck dependency status
+for the exact future release head.
 
 Data classes: operator display/profile content and hashed auth subjects are
 stored; email/password handled by Clerk, not this database. No cards/CVV/bank/ID
@@ -195,7 +199,7 @@ operations still require review; withdrawal is not a promise of forensic erasure
 ## Release decision and rollback
 
 **NO-GO for production or publication from the current task branch.** The
-unfixed high dependency advisory, absent repository license/three development
+absent repository license/three development
 plugin license declarations, non-durable Git storage, authenticated browser
 acceptance, owner designation and privacy/moderation review remain. The local
 branch is 18 commits behind canonical `main`, and a merge-tree review reports

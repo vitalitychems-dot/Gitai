@@ -7,6 +7,7 @@ import { CLERK_PROXY_PATH, clerkProxyMiddleware, getClerkProxyHost } from "./mid
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { releaseReadiness } from "./lib/release-readiness";
 
 const app: Express = express();
 
@@ -71,6 +72,13 @@ app.use(
   })),
 );
 
+app.use("/api/gitai", (req, res, next) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && !releaseReadiness().ready) {
+    res.status(503).json({ error: "GitAI writes are unavailable until production prerequisites are verified." });
+    return;
+  }
+  next();
+});
 app.use("/api", router);
 const errors: ErrorRequestHandler = (err, req, res, _next) => {
   const status = err instanceof ZodError ? 400 :
