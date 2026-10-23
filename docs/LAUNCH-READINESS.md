@@ -61,12 +61,16 @@ after a hard kill must be investigated before manual removal.
 
 ## Remaining decisions and blockers
 
-1. **Durable primary plus independent backup:** choose the approved service and
-   separately retained backup destination, with encryption, least-privilege IAM,
-   quotas, retention and recovery ownership. Replit App Storage is a possible
-   primary object service, but its documentation says it has no object versioning,
-   lifecycle rules or retention policies. It alone is not evidence of independent
-   backup. No service was provisioned or credentials requested yet.
+1. **Durable primary plus independent backup:** the owner selected App Storage
+   primary plus a private Cloudflare R2 backup. App Storage provisioning succeeded
+   and configured the three standard storage keys in this Project. No repository
+   objects were uploaded, public storage routes added, or production adapter
+   enabled. Cloudflare's API integration is available but not yet connected.
+   Finish app-specific private prefixes/buckets, encryption, least-privilege IAM,
+   quotas, retention and recovery ownership before remote tests. App Storage has
+   no documented object versioning, lifecycle rules or retention policies; it
+   alone is not an independent backup. Provisioning does not establish durability
+   or permit opening the production gate.
 2. **Owner identity:** `GITAI_OWNER_SUBJECT` is absent in production configuration.
    Confirm the intended authenticated production operator through the secure
    configuration flow. Development and production Clerk accounts are separate;

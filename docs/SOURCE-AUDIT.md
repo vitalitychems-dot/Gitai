@@ -25,12 +25,22 @@ GitHub's `size` field is metadata in KiB, not measured download size.
 | vitalitychems-dot/Gitbook | `ed00c77ca6345c31b0316c03c0204d89f8bf601a` main | Metadata: 6,181,328 KiB; **root index only** and public README. | Archive/backup trees listed but not expanded. Storage/archive manifest bodies not read because public README confirms private intake/history boundaries. No bulk fetch, private memory, raw conversations, vault or customer data. License undetected. Coverage deliberately partial. |
 | vitalitychems-dot/combined | unavailable | Repository API returned HTTP 404 unauthenticated. | Could be private, missing, renamed or otherwise inaccessible; no inference. Cannot pin or inspect manifests. |
 | vitalitychems-dot/box-backup-2026-10-13 | unavailable | Repository API returned HTTP 404 unauthenticated. | No archive retrieval, ref pin or manifest inspection possible. |
-| vitalitychems-dot owner account | supplied identity only | Supplied repository ownership checked via repository metadata. | No account-wide scrape, guessed recipients or outreach. |
+| Owner-described Storage backend | exact accessible source unresolved | Public `vitalitychems-dot/storage` repository metadata returned 404; bounded public owner/name/description search returned no matches. | No ref, license or build can be established. No private storage, archive or memory was opened. Do not equate this source identity with the separately approved App Storage cloud service. |
+| vitalitychems-dot owner account | supplied identity only | Supplied repository ownership checked via repository metadata; bounded public metadata search for Storage only. | No account-wide content scrape, guessed recipients or outreach. |
 | Tessera | no exact source ref supplied for direct audit | Gitbook public README confirms separate application boundary. | No Tessera source or private memory imported. Owner's handoff-only rule applies. |
 | “REA REPO/Reddit” | unspecified | Missing exact repository/reference recorded. | No invented source. |
 | Five screenshots and text conversation in another chat | unavailable here | Not accessed. | No claims about their contents or verified consciousness requirements. |
 
 ## Reuse and license decision
+
+The owner confirmed that Storage is the backend and the network repository is
+the network, while GitAI remains its own app. A further bounded network recheck
+found the same `fc5435de9bfafd18d536583e68d6283436e4f5b8` main ref. Root names
+were inventoried; public `IDENTITY.md` and `HANDOFF-NETWORK.md` were read as
+untrusted source documents, not instructions or verified test receipts.
+Their separation-of-project roles informs the boundary only. No referenced
+memory/history, protected vault, executable source or operational command was
+opened, imported or run; no upstream writes or network admission occurred.
 
 Gitai's root package identifies the workspace as MIT, but the API reports no
 repository-level license and no LICENSE file appeared in the inventory. This is

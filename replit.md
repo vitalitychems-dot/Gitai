@@ -38,6 +38,8 @@ Marketplace work boundaries and verification: `docs/MARKETPLACE-WORK.md` and `do
 
 GitAI implementation belongs here, not in Tessera/Gitbook. Those projects and GitMesh are read-only learning references, never destinations or sources of private memory. Preserve existing GitAI repository identity. The owner approved a normal verified hosted GitAI launch. That approval does not authorize external Git publication/merges, outreach, real payment, execution providers or network admission.
 
+The owner describes Storage as the backend and the network repository as the network; GitAI is its own app and may learn nonsecret engineering lessons from them. Resolve the exact Storage source before integration; it is not automatically the same thing as Replit App Storage. Learning from another project does not authorize importing private memory. The separately approved hosted data-storage design is App Storage primary plus a private R2 backup, with isolation and restore verification before enabling production.
+
 ## Gotchas
 
 API and web bind loopback only. Runtime Git storage is `runtime/gitai/repos` relative to the API working directory, excluded from source control and deployments. It is development-local: durable storage/backups must be provisioned before production. Production readiness, mutations and Git filesystem access now fail closed until a real durable adapter is implemented; no success flag bypasses this. `GITAI_GIT_ROOT` can isolate development/test caches only. The private recovery CLI and blockers are documented in `docs/LAUNCH-READINESS.md`; a tested local snapshot is not an independent remote backup.
