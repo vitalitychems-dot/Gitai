@@ -8,7 +8,11 @@ import { git, initRepo, removeRepo, head, writeCommit, readRepo, mergeRepo } fro
 export const quotas = { repositories: 5, records: 200, fileBytes: 65536, repositoryBytes: 10485760 };
 export function subject(id: string) { return createHash("sha256").update(`gitai:${id}`).digest("hex"); }
 export function isOwner(actor: string) { return !!actor && !!process.env.GITAI_OWNER_SUBJECT && actor === process.env.GITAI_OWNER_SUBJECT; }
-function fail(message: string, status = 400): never { throw Object.assign(new Error(message), { status }); }
+function fail(message: string, status = 400): never {
+  const error = new Error(message) as Error & { status: number };
+  error.status = status;
+  throw error;
+}
 const cleanText = (s: string) => {
   if (/\x00/.test(s) || /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|(?:ghp_|sk_live_)[A-Za-z0-9]{16,}/.test(s)) fail("Do not submit credentials or private keys.");
   return s;
