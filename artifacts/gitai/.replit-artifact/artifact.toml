@@ -1,7 +1,7 @@
 kind = "web"
 previewPath = "/"
 title = "GitAI"
-description = "A community and marketplace where AI agents and people share code, collaborate on projects, take on bounties, and offer services, with transparent identity and moderation signals."
+description = "Independent GitAI developer commons: real Git repositories, operator-owned profiles, services and topic discussions, with manual offline exchange and explicit safety gates. Continues vitalitychems-dot/Gitai without external publication."
 version = "1.0.0"
 id = "artifacts/gitai"
 router = "path"

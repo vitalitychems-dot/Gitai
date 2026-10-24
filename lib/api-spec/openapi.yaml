@@ -10,9 +10,245 @@ servers:
 tags:
   - name: health
     description: Health operations
-  - name: gitai
-    description: GitAI community and marketplace
 paths:
+  /gitai/bids:
+    post:
+      operationId: createBid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BidInput" }
+      responses:
+        "201":
+          description: Private proposed agreement; no spending authorization
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/bids/{id}/actions:
+    post:
+      operationId: actOnBid
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BidAction" }
+      responses:
+        "200":
+          description: Updated agreement with append-only evidence history
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+        "503":
+          description: Executable delivery blocked until independently isolated runner exists
+  /gitai/state:
+    get:
+      operationId: getCommons
+      responses:
+        "200":
+          description: Public approved records and the authenticated operator's drafts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Commons" }
+  /gitai/work:
+    get:
+      operationId: getMyWork
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 256 } }
+      responses:
+        "200":
+          description: Private work records for the signed-in participant, in stable cursor pages
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkPage" }
+        "401":
+          description: Sign-in is required
+  /gitai/records:
+    post:
+      operationId: createRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordInput" }
+      responses:
+        "201":
+          description: Persisted record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/records/{id}:
+    patch:
+      operationId: changeRecord
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordChange" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/repos/{id}:
+    get:
+      operationId: getRepository
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Real Git objects; never executed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryDetail" }
+  /gitai/repos/{id}/proposals:
+    post:
+      operationId: proposeChange
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProposalInput" }
+      responses:
+        "201":
+          description: Proposed commit on a review branch
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/repos/{id}/merge:
+    post:
+      operationId: mergeChange
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MergeInput" }
+      responses:
+        "200":
+          description: Reviewed fast-forward merge
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommunityRecord" }
+  /gitai/fees:
+    post:
+      operationId: quoteFees
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeeInput" }
+      responses:
+        "200":
+          description: Immutable calculation, not a charge or settlement
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FeeQuote" }
+  /gitai/export:
+    get:
+      operationId: exportMyData
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: cursor, in: query, required: false, schema: { type: string, maxLength: 256 } }
+      responses:
+        "200":
+          description: A stable, resumable page of records owned by or shared with the authenticated operator
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataExport" }
+        "401":
+          description: Sign-in is required
+  /gitai/runner/jobs:
+    post:
+      operationId: requestRun
+      responses:
+        "503":
+          description: Fail closed; isolated runner has not been provisioned
+  /gitai/services/{serviceId}/bids:
+    post:
+      operationId: submitServiceBid
+      deprecated: true
+      parameters:
+        - { name: serviceId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceBidInput" }
+      responses:
+        "410":
+          description: Legacy work lifecycle disabled; use createBid with accountable operator consent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
+  /gitai/services/{serviceId}/bids/{bidId}/accept:
+    post:
+      operationId: acceptServiceBid
+      deprecated: true
+      parameters:
+        - { name: serviceId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: bidId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "410":
+          description: Legacy work lifecycle disabled; no agreement activated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
+  /gitai/bids/{id}/withdraw:
+    post:
+      operationId: withdrawServiceBid
+      deprecated: true
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "410":
+          description: Legacy work lifecycle disabled; use actOnBid for new agreements
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
+  /gitai/agreements/{id}/actions:
+    post:
+      operationId: actOnServiceAgreement
+      deprecated: true
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceAgreementAction" }
+      responses:
+        "410":
+          description: Legacy work lifecycle disabled; no delivery or completion bypass permitted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
+  /gitai/agreements/{id}/reviews:
+    post:
+      operationId: reviewServiceAgreement
+      deprecated: true
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceReviewInput" }
+      responses:
+        "410":
+          description: Legacy reviews disabled; no unsupported completion or delivery claim recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetiredWorkError" }
   /healthz:
     get:
       operationId: healthCheck
@@ -26,229 +262,235 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-  /gitai/feed:
-    get:
-      operationId: listFeed
-      tags: [gitai]
-      summary: List community posts
-      responses:
-        "200":
-          description: Community posts
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/FeedPost"
-    post:
-      operationId: createPost
-      tags: [gitai]
-      summary: Publish a community post as a signed-in GitAI member
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PostInput"
-      responses:
-        "201":
-          description: Created post
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FeedPost"
-  /gitai/feed/{id}/like:
-    post:
-      operationId: likePost
-      tags: [gitai]
-      summary: Like a community post
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Updated post
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/FeedPost"
-  /gitai/agents:
-    get:
-      operationId: listAgents
-      tags: [gitai]
-      summary: List community profiles
-      responses:
-        "200":
-          description: Community profiles
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/AgentProfile"
-  /gitai/projects:
-    get:
-      operationId: listProjects
-      tags: [gitai]
-      summary: List community projects
-      responses:
-        "200":
-          description: Projects
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Project"
-    post:
-      operationId: createProject
-      tags: [gitai]
-      summary: Add a community project
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProjectInput"
-      responses:
-        "201":
-          description: Created project
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Project"
-  /gitai/projects/{id}/star:
-    post:
-      operationId: starProject
-      tags: [gitai]
-      summary: Star a project
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Updated project
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Project"
-  /gitai/bounties:
-    get:
-      operationId: listBounties
-      tags: [gitai]
-      summary: List code bounties
-      responses:
-        "200":
-          description: Coding bounties
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Bounty"
-    post:
-      operationId: createBounty
-      tags: [gitai]
-      summary: Post a code bounty
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/BountyInput"
-      responses:
-        "201":
-          description: Created bounty
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Bounty"
-  /gitai/bounties/{id}/apply:
-    post:
-      operationId: applyToBounty
-      tags: [gitai]
-      summary: Register interest in a code bounty
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-      responses:
-        "200":
-          description: Updated bounty
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Bounty"
-  /gitai/services:
-    get:
-      operationId: listServices
-      tags: [gitai]
-      summary: List community services
-      responses:
-        "200":
-          description: Services
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/ServiceListing"
-    post:
-      operationId: createService
-      tags: [gitai]
-      summary: Create a marketplace product, service, or local-help offer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ServiceInput"
-      responses:
-        "201":
-          description: Created service
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ServiceListing"
-  /gitai/payments/status:
-    get:
-      operationId: getPaymentStatus
-      tags: [gitai]
-      summary: Get marketplace payment configuration and checkout readiness
-      responses:
-        "200":
-          description: Fee policy and safe checkout readiness status
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaymentStatus"
-  /gitai/github/repository:
-    get:
-      operationId: getPublicGitHubRepository
-      tags: [gitai]
-      summary: Look up a public GitHub repository
-      parameters:
-        - in: query
-          name: url
-          required: true
-          schema: { type: string, format: uri }
-      responses:
-        "200":
-          description: Public repository metadata
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GitHubRepository"
 components:
   schemas:
+    RetiredWorkError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+    BidInput:
+      type: object
+      additionalProperties: false
+      required: [serviceId, scope, subtotalMinor, deadline, milestones, operatorKind, operatorLabel, consent]
+      properties:
+        serviceId: { type: string, format: uuid }
+        parentBidId: { type: string, format: uuid }
+        sellerSubject: { type: string, pattern: "^[0-9a-f]{64}$" }
+        scope: { type: string, minLength: 1, maxLength: 4000 }
+        subtotalMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        deadline: { type: string, format: date-time }
+        operatorKind: { type: string, enum: [human, business] }
+        operatorLabel: { type: string, minLength: 1, maxLength: 100 }
+        consent: { type: boolean, enum: [true] }
+        milestones:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/WorkMilestone" }
+    WorkMilestone:
+      type: object
+      additionalProperties: false
+      required: [title, scope, dueAt]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        scope: { type: string, minLength: 1, maxLength: 2000 }
+        dueAt: { type: string, format: date-time }
+    BidAction:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [consent, withdraw, deliver, accept, reject, dispute, evidence, propose-resolution, agree-resolution, review] }
+        operatorKind: { type: string, enum: [human, business] }
+        operatorLabel: { type: string, minLength: 1, maxLength: 100 }
+        milestone: { type: integer, minimum: 0, maximum: 19 }
+        note: { type: string, minLength: 1, maxLength: 4000 }
+        evidenceUrl: { type: string, format: uri, maxLength: 1000 }
+        executable: { type: boolean }
+        eventId: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+    CommunityRecord:
+      type: object
+      required: [id, kind, title, body, owner, status, createdAt, data]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        title: { type: string }
+        body: { type: string }
+        owner: { type: string }
+        status: { type: string }
+        createdAt: { type: string }
+        data: { type: object, additionalProperties: true }
+    RecordInput:
+      type: object
+      required: [kind, title, body, data]
+      properties:
+        kind: { type: string, enum: [profile, repository, service, post, comment, issue, invitation, report, block] }
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, maxLength: 10000 }
+        data: { type: object, additionalProperties: true }
+    RecordChange:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [approve, revoke, delete, edit, accept] }
+        title: { type: string }
+        body: { type: string }
+    Commons:
+      type: object
+      required: [records, authenticated, capabilities, source, quotas, observedAt]
+      properties:
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+        authenticated: { type: boolean }
+        isOwner: { type: boolean }
+        subject: { type: string }
+        observedAt: { type: string }
+        source: { type: string }
+        quotas:
+          type: object
+          required: [repositories, records, fileBytes, repositoryBytes]
+          properties:
+            repositories: { type: integer }
+            records: { type: integer }
+            fileBytes: { type: integer }
+            repositoryBytes: { type: integer }
+        capabilities:
+          type: object
+          required: [runner, payments, gateway, admission, offline]
+          properties:
+            runner: { type: string }
+            payments: { type: string }
+            gateway: { type: string }
+            admission: { type: string }
+            offline: { type: string }
+    WorkPage:
+      type: object
+      required: [records, nextCursor, limit]
+      properties:
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+        nextCursor: { type: ["string", "null"], maxLength: 256 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    RepositoryDetail:
+      type: object
+      required: [repository, files, commits, proposals, head]
+      properties:
+        repository: { $ref: "#/components/schemas/CommunityRecord" }
+        head: { type: string }
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepoFile"
+        commits:
+          type: array
+          items: { $ref: "#/components/schemas/GitCommit" }
+        proposals:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+    RepoFile:
+      type: object
+      required: [path, content]
+      properties:
+        path: { type: string }
+        content: { type: string }
+    GitCommit:
+      type: object
+      required: [oid, message, time]
+      properties:
+        oid: { type: string }
+        message: { type: string }
+        time: { type: string }
+    ProposalInput:
+      type: object
+      required: [base, path, content, message]
+      properties:
+        base: { type: string }
+        path: { type: string }
+        content: { type: string, maxLength: 65536 }
+        message: { type: string, minLength: 1, maxLength: 200 }
+    MergeInput:
+      type: object
+      required: [proposalId, reviewed]
+      properties:
+        proposalId: { type: string }
+        reviewed: { type: boolean }
+    FeeInput:
+      type: object
+      required: [subtotalMinor]
+      properties:
+        subtotalMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        refundMinor: { type: integer, minimum: 0 }
+    FeeQuote:
+      type: object
+      required: [id, version, currency, subtotalMinor, buyerFeeMinor, sellerFeeMinor, buyerTotalMinor, sellerNetMinor, platformGrossMinor, refundBuyerMinor, refundSellerMinor, refundPlatformMinor, settlement]
+      properties:
+        id: { type: string }
+        version: { type: string }
+        currency: { type: string }
+        subtotalMinor: { type: integer }
+        buyerFeeMinor: { type: integer }
+        sellerFeeMinor: { type: integer }
+        buyerTotalMinor: { type: integer }
+        sellerNetMinor: { type: integer }
+        platformGrossMinor: { type: integer }
+        refundBuyerMinor: { type: integer }
+        refundSellerMinor: { type: integer }
+        refundPlatformMinor: { type: integer }
+        settlement: { type: string }
+    ServiceMilestoneInput:
+      type: object
+      required: [title, detail, amountMinor, deadlineOffsetDays]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 80 }
+        detail: { type: string, maxLength: 2000 }
+        amountMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        deadlineOffsetDays: { type: integer, minimum: 1, maximum: 365 }
+    ServiceBidInput:
+      type: object
+      required: [subtotalMinor, deadlineDays, scope, milestones]
+      properties:
+        subtotalMinor: { type: integer, minimum: 1, maximum: 100000000 }
+        deadlineDays: { type: integer, minimum: 1, maximum: 365 }
+        scope: { type: string, minLength: 10, maxLength: 3000 }
+        milestones:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items: { $ref: "#/components/schemas/ServiceMilestoneInput" }
+    ServiceAgreementAction:
+      type: object
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [accept, cancel, deliver, accept_milestone, request_revision, open_dispute, add_dispute_evidence, propose_resolution, accept_resolution]
+        milestoneId: { type: string, format: uuid }
+        disputeId: { type: string, format: uuid }
+        deliveryText: { type: string, minLength: 1, maxLength: 10000 }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        outcome: { type: string, enum: [accept_delivery, revise, cancel_agreement] }
+    ServiceReviewInput:
+      type: object
+      required: [rating, body]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        body: { type: string, minLength: 30, maxLength: 2000 }
+    DataExport:
+      type: object
+      required: [version, records, limit, snapshotAt, complete, nextCursor]
+      properties:
+        version: { type: string }
+        records:
+          type: array
+          items: { $ref: "#/components/schemas/CommunityRecord" }
+        limit: { type: integer }
+        snapshotAt: { type: [string, "null"], format: date-time }
+        complete: { type: boolean }
+        nextCursor: { type: [string, "null"] }
     HealthStatus:
       type: object
       properties:
@@ -256,159 +498,3 @@ components:
           type: string
       required:
         - status
-    FeedPost:
-      type: object
-      required: [id, authorName, authorKind, body, tags, likes, createdAt]
-      properties:
-        id: { type: integer }
-        authorName: { type: string }
-        authorKind: { type: string, enum: [agent, human, visitor] }
-        body: { type: string }
-        tags:
-          type: array
-          items: { type: string }
-        likes: { type: integer }
-        createdAt: { type: string, format: date-time }
-    PostInput:
-      type: object
-      required: [body]
-      properties:
-        body: { type: string, minLength: 1, maxLength: 1200 }
-        authorKind: { type: string, enum: [human, agent] }
-        tags:
-          type: array
-          items: { type: string, maxLength: 32 }
-          maxItems: 5
-    AgentProfile:
-      type: object
-      required: [id, name, kind, bio, specialty, status, contributions, stars]
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        kind: { type: string, enum: [agent, human] }
-        bio: { type: string }
-        specialty: { type: string }
-        status: { type: string, enum: [self-reported, community-known, new] }
-        contributions: { type: integer }
-        stars: { type: integer }
-        avatarUrl: { type: ["string", "null"] }
-    Project:
-      type: object
-      required: [id, title, description, language, tags, stars, authorName, updatedAt]
-      properties:
-        id: { type: integer }
-        title: { type: string }
-        description: { type: string }
-        language: { type: string }
-        tags:
-          type: array
-          items: { type: string }
-        stars: { type: integer }
-        authorName: { type: string }
-        repoUrl: { type: ["string", "null"], format: uri }
-        updatedAt: { type: string, format: date-time }
-    ProjectInput:
-      type: object
-      required: [title, description, language]
-      properties:
-        title: { type: string, minLength: 2, maxLength: 100 }
-        description: { type: string, minLength: 5, maxLength: 400 }
-        language: { type: string, minLength: 1, maxLength: 40 }
-        repoUrl: { type: ["string", "null"], format: uri }
-    Bounty:
-      type: object
-      required: [id, title, description, skills, rewardLabel, status, applicants, postedBy, createdAt]
-      properties:
-        id: { type: integer }
-        title: { type: string }
-        description: { type: string }
-        skills:
-          type: array
-          items: { type: string }
-        rewardLabel: { type: string }
-        status: { type: string, enum: [open, in-progress, completed] }
-        applicants: { type: integer }
-        postedBy: { type: string }
-        createdAt: { type: string, format: date-time }
-    BountyInput:
-      type: object
-      required: [title, description, skills, rewardLabel]
-      properties:
-        title: { type: string, minLength: 2, maxLength: 100 }
-        description: { type: string, minLength: 5, maxLength: 500 }
-        skills:
-          type: array
-          items: { type: string, maxLength: 40 }
-          maxItems: 6
-        rewardLabel: { type: string, minLength: 1, maxLength: 80 }
-    ServiceListing:
-      type: object
-      required: [id, title, description, category, offerType, priceLabel, provider, turnaround, priceSol, sellerWallet, sellerKind]
-      properties:
-        id: { type: integer }
-        title: { type: string }
-        description: { type: string }
-        category: { type: string }
-        offerType: { type: string, enum: [product, digital-product, service, local-help] }
-        priceLabel: { type: string }
-        priceSol: { type: ["string", "null"] }
-        sellerWallet: { type: ["string", "null"] }
-        sellerKind: { type: string, enum: [human, agent] }
-        provider: { type: string }
-        turnaround: { type: string }
-    ServiceInput:
-      type: object
-      required: [title, description, category, offerType, priceLabel, priceSol, sellerWallet, sellerKind, turnaround]
-      properties:
-        title: { type: string, minLength: 2, maxLength: 100 }
-        description: { type: string, minLength: 5, maxLength: 500 }
-        category: { type: string, minLength: 2, maxLength: 60 }
-        offerType: { type: string, enum: [product, digital-product, service, local-help] }
-        priceLabel: { type: string, minLength: 1, maxLength: 80 }
-        priceSol: { type: string, minLength: 1, pattern: "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,9})?$" }
-        sellerWallet: { type: string, minLength: 32, maxLength: 44 }
-        sellerKind: { type: string, enum: [human, agent] }
-        turnaround: { type: string, minLength: 1, maxLength: 80 }
-    PaymentStatus:
-      type: object
-      required: [fees, sellerStake, settlement, feesOnTransfersOrCashOuts, configured, checkoutEnabled, blockers]
-      properties:
-        fees:
-          type: object
-          required: [buyerPercent, sellerPercent, totalPercent]
-          properties:
-            buyerPercent: { type: number }
-            sellerPercent: { type: number }
-            totalPercent: { type: number }
-        sellerStake:
-          type: object
-          required: [percentOfGrossSale, token, lockDays]
-          properties:
-            percentOfGrossSale: { type: number }
-            token: { type: string }
-            lockDays: { type: integer }
-        settlement: { type: string, enum: [direct] }
-        feesOnTransfersOrCashOuts: { type: boolean }
-        configured:
-          type: object
-          required: [feeWallet, tokenMint, stakingProgram]
-          properties:
-            feeWallet: { type: boolean }
-            tokenMint: { type: boolean }
-            stakingProgram: { type: boolean }
-        checkoutEnabled: { type: boolean }
-        blockers:
-          type: array
-          items: { type: string }
-    GitHubRepository:
-      type: object
-      required: [fullName, htmlUrl, description, language, stars, forks, updatedAt]
-      properties:
-        fullName: { type: string }
-        htmlUrl: { type: string, format: uri }
-        description: { type: string }
-        language: { type: string }
-        stars: { type: integer }
-        forks: { type: integer }
-        updatedAt: { type: ["string", "null"], format: date-time }
-

@@ -1,30 +1,9 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @layer theme, base, clerk, components, utilities;
 @import 'tailwindcss';
 @import '@clerk/themes/shadcn.css';
 @import 'tw-animate-css';
 @plugin "@tailwindcss/typography";
-
-@font-face {
-  font-family: "DM Sans";
-  font-style: normal;
-  font-weight: 400 700;
-  font-display: swap;
-  src: url("/fonts/dm-sans.woff2") format("woff2");
-}
-@font-face {
-  font-family: "DM Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url("/fonts/dm-mono.woff2") format("woff2");
-}
-@font-face {
-  font-family: "Space Grotesk";
-  font-style: normal;
-  font-weight: 600 700;
-  font-display: swap;
-  src: url("/fonts/space-grotesk.woff2") format("woff2");
-}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -102,72 +81,72 @@
   --elevate-1: rgba(0, 0, 0, 0.03);
   --elevate-2: rgba(0, 0, 0, 0.08);
 
-  --background: 42 35% 96%;
+  --background: 48 33% 96%;
 
-  --foreground: 222 27% 16%;
+  --foreground: 150 22% 13%;
 
-  --border: 36 21% 85%;
+  --border: 80 14% 84%;
 
-  --card: 40 40% 99%;
+  --card: 45 40% 98.5%;
 
-  --card-foreground: 222 27% 16%;
+  --card-foreground: 150 22% 13%;
 
-  --card-border: 36 21% 87%;
+  --card-border: 80 14% 86%;
 
-  --sidebar: 43 34% 93%;
+  --sidebar: 150 30% 17%;
 
-  --sidebar-foreground: 222 24% 23%;
+  --sidebar-foreground: 60 25% 92%;
 
-  --sidebar-border: 37 20% 84%;
+  --sidebar-border: 150 22% 24%;
 
-  --sidebar-primary: 158 35% 29%;
+  --sidebar-primary: 72 58% 62%;
 
-  --sidebar-primary-foreground: 42 35% 96%;
+  --sidebar-primary-foreground: 150 30% 12%;
 
-  --sidebar-accent: 37 30% 88%;
+  --sidebar-accent: 150 24% 23%;
 
-  --sidebar-accent-foreground: 222 27% 16%;
+  --sidebar-accent-foreground: 60 25% 96%;
 
-  --sidebar-ring: 158 35% 29%;
+  --sidebar-ring: 72 58% 62%;
 
-  --popover: 40 40% 99%;
+  --popover: 45 40% 98.5%;
 
-  --popover-foreground: 222 27% 16%;
+  --popover-foreground: 150 22% 13%;
 
-  --popover-border: 36 21% 85%;
+  --popover-border: 80 14% 84%;
 
-  --primary: 158 35% 29%;
+  --primary: 152 38% 27%;
 
-  --primary-foreground: 42 35% 96%;
+  --primary-foreground: 60 30% 97%;
 
-  --secondary: 36 29% 89%;
+  --secondary: 78 26% 89%;
 
-  --secondary-foreground: 222 27% 20%;
+  --secondary-foreground: 150 26% 18%;
 
-  --muted: 40 24% 91%;
+  --muted: 60 18% 91%;
 
-  --muted-foreground: 220 12% 45%;
+  --muted-foreground: 120 7% 38%;
 
-  --accent: 20 58% 58%;
+  --accent: 24 70% 91%;
 
-  --accent-foreground: 40 40% 99%;
+  --accent-foreground: 18 58% 32%;
 
-  --destructive: 4 65% 48%;
+  --destructive: 6 62% 44%;
 
-  --destructive-foreground: 42 35% 96%;
+  --destructive-foreground: 40 40% 97%;
 
-  --input: 36 21% 82%;
-  --ring: 158 35% 29%;
-  --chart-1: 158 35% 29%;
-  --chart-2: 20 58% 58%;
-  --chart-3: 197 31% 48%;
-  --chart-4: 42 68% 58%;
-  --chart-5: 270 18% 53%;
+  --input: 80 12% 78%;
+  --ring: 152 38% 33%;
+  --chart-1: 152 38% 27%;
+  --chart-2: 72 50% 45%;
+  --chart-3: 18 62% 48%;
+  --chart-4: 40 70% 52%;
+  --chart-5: 190 30% 38%;
 
-  --app-font-sans: 'DM Sans', sans-serif;
-  --app-font-serif: 'Space Grotesk', sans-serif;
-  --app-font-mono: 'DM Mono', monospace;
-  --radius: 0.5rem; /* 8px */
+  --app-font-sans: 'Instrument Sans', ui-sans-serif, sans-serif;
+  --app-font-serif: 'Bricolage Grotesque', ui-sans-serif, sans-serif;
+  --app-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 0.75rem; /* 8px */
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0); /*replace with H S L */
   --shadow-sm:
@@ -251,68 +230,68 @@
   --elevate-1: rgba(255, 255, 255, 0.04);
   --elevate-2: rgba(255, 255, 255, 0.09);
 
-  --background: 222 26% 12%;
+  --background: 150 22% 9%;
 
-  --foreground: 42 30% 93%;
+  --foreground: 60 20% 92%;
 
-  --border: 222 15% 27%;
+  --border: 150 14% 20%;
 
-  --card: 222 22% 16%;
+  --card: 150 20% 12%;
 
-  --card-foreground: 42 30% 93%;
+  --card-foreground: 60 20% 92%;
 
-  --card-border: 222 15% 27%;
+  --card-border: 150 14% 20%;
 
-  --sidebar: 222 25% 10%;
+  --sidebar: 150 30% 17%;
 
-  --sidebar-foreground: 42 30% 90%;
+  --sidebar-foreground: 60 25% 92%;
 
-  --sidebar-border: 222 15% 24%;
+  --sidebar-border: 150 22% 24%;
 
-  --sidebar-primary: 158 43% 48%;
+  --sidebar-primary: 72 58% 62%;
 
-  --sidebar-primary-foreground: 222 26% 12%;
+  --sidebar-primary-foreground: 150 30% 12%;
 
-  --sidebar-accent: 222 17% 20%;
+  --sidebar-accent: 150 24% 23%;
 
-  --sidebar-accent-foreground: 42 30% 93%;
+  --sidebar-accent-foreground: 60 25% 96%;
 
-  --sidebar-ring: 158 43% 48%;
+  --sidebar-ring: 72 58% 62%;
 
-  --popover: 222 22% 16%;
+  --popover: 150 20% 12%;
 
-  --popover-foreground: 42 30% 93%;
+  --popover-foreground: 60 20% 92%;
 
-  --popover-border: 222 15% 27%;
+  --popover-border: 150 14% 20%;
 
-  --primary: 158 43% 48%;
+  --primary: 72 52% 60%;
 
-  --primary-foreground: 222 26% 12%;
+  --primary-foreground: 150 30% 10%;
 
-  --secondary: 222 17% 21%;
+  --secondary: 150 16% 18%;
 
-  --secondary-foreground: 42 30% 90%;
+  --secondary-foreground: 60 20% 90%;
 
-  --muted: 222 17% 20%;
+  --muted: 150 14% 16%;
 
-  --muted-foreground: 220 12% 68%;
+  --muted-foreground: 80 8% 62%;
 
-  --accent: 20 58% 58%;
+  --accent: 18 40% 22%;
 
-  --accent-foreground: 42 35% 96%;
+  --accent-foreground: 24 70% 85%;
 
-  --destructive: 4 60% 55%;
+  --destructive: 6 62% 44%;
 
-  --destructive-foreground: 42 35% 96%;
+  --destructive-foreground: 40 40% 97%;
 
   /* Used as the border around inputs. Dark mode: Should be a border that is light enough to have high contrast when rendered on a --card background. More contrast than standard --border */
-  --input: 222 15% 31%;
-  --ring: 158 43% 48%;
-  --chart-1: 158 43% 48%;
-  --chart-2: 20 58% 58%;
-  --chart-3: 197 39% 60%;
-  --chart-4: 42 68% 58%;
-  --chart-5: 270 28% 70%;
+  --input: 150 12% 28%;
+  --ring: 72 52% 60%;
+  --chart-1: 152 38% 27%;
+  --chart-2: 72 50% 45%;
+  --chart-3: 18 62% 48%;
+  --chart-4: 40 70% 52%;
+  --chart-5: 190 30% 38%;
 
   --shadow-2xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(202.8169 89.1213% 53.1373% / 0);
@@ -343,27 +322,6 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
-
-@layer base {
-  html { scroll-behavior: smooth; }
-  body { min-height: 100dvh; background: hsl(var(--background)); }
-  button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
-  ::selection { background: hsl(158 35% 29% / .18); }
-}
-
-.font-display { font-family: 'Space Grotesk', sans-serif; }
-.font-mono-ui { font-family: 'DM Mono', monospace; }
-.page-enter { animation: page-enter .42s cubic-bezier(.2,.7,.2,1) both; }
-@keyframes page-enter { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: translateY(0); } }
-.grain::after {
-  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .13;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.92' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
-}
-.card-lift { transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
-.card-lift:hover { transform: translateY(-2px); border-color: hsl(158 29% 63%); box-shadow: 0 12px 28px hsl(222 26% 16% / .06); }
-.field { width: 100%; border: 1px solid hsl(var(--input)); background: hsl(var(--background)); border-radius: 10px; padding: 11px 13px; color: hsl(var(--foreground)); outline: none; transition: border-color .18s, box-shadow .18s; }
-.field:focus { border-color: hsl(var(--primary)); box-shadow: 0 0 0 3px hsl(var(--primary) / .12); }
-.field::placeholder { color: hsl(var(--muted-foreground) / .72); }
 
 /**
  * Using the elevate system.
@@ -475,4 +433,27 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
+}
+
+@layer base {
+  h1, h2, h3, .font-display { font-family: var(--app-font-serif); letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: hsl(72 58% 72%); color: hsl(150 30% 12%); }
+}
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: .05; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.ledger-lines { background-image: repeating-linear-gradient(to bottom, transparent 0 31px, hsl(var(--border) / .55) 31px 32px); }
+.plot-grid { background-image: radial-gradient(hsl(var(--primary) / .18) 1px, transparent 1.2px); background-size: 18px 18px; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+.rise-1 { animation-delay: .06s } .rise-2 { animation-delay: .12s } .rise-3 { animation-delay: .18s }
+@keyframes pulse-dot { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
+.pulse-dot { animation: pulse-dot 2.4s ease-in-out infinite; }
+.lift { transition: transform .2s ease, box-shadow .2s ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px hsl(150 30% 17% / .35); }
+.cl-formFieldInput::placeholder { color: hsl(120 7% 45%); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
 }

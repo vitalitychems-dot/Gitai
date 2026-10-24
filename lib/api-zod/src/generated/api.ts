@@ -8,348 +8,470 @@
 import * as zod from 'zod';
 
 
+export const createBidBodySellerSubjectRegExp = new RegExp('^[0-9a-f]{64}$');
+export const createBidBodyScopeMax = 4000;
+
+export const createBidBodySubtotalMinorMax = 100000000;
+
+export const createBidBodyOperatorLabelMax = 100;
+
+export const createBidBodyMilestonesItemTitleMax = 120;
+
+export const createBidBodyMilestonesItemScopeMax = 2000;
+
+export const createBidBodyMilestonesMax = 20;
+
+
+
+export const CreateBidBody = zod.object({
+  "serviceId": zod.string().uuid(),
+  "parentBidId": zod.string().uuid().optional(),
+  "sellerSubject": zod.string().regex(createBidBodySellerSubjectRegExp).optional(),
+  "scope": zod.string().min(1).max(createBidBodyScopeMax),
+  "subtotalMinor": zod.number().int().min(1).max(createBidBodySubtotalMinorMax),
+  "deadline": zod.coerce.date(),
+  "operatorKind": zod.enum(['human', 'business']),
+  "operatorLabel": zod.string().min(1).max(createBidBodyOperatorLabelMax),
+  "consent": zod.literal(true),
+  "milestones": zod.array(zod.object({
+  "title": zod.string().min(1).max(createBidBodyMilestonesItemTitleMax),
+  "scope": zod.string().min(1).max(createBidBodyMilestonesItemScopeMax),
+  "dueAt": zod.coerce.date()
+})).min(1).max(createBidBodyMilestonesMax)
+})
+
+export const CreateBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ActOnBidParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const actOnBidBodyOperatorLabelMax = 100;
+
+export const actOnBidBodyMilestoneMin = 0;
+export const actOnBidBodyMilestoneMax = 19;
+
+export const actOnBidBodyNoteMax = 4000;
+
+export const actOnBidBodyEvidenceUrlMax = 1000;
+
+export const actOnBidBodyRatingMax = 5;
+
+
+
+export const ActOnBidBody = zod.object({
+  "action": zod.enum(['consent', 'withdraw', 'deliver', 'accept', 'reject', 'dispute', 'evidence', 'propose-resolution', 'agree-resolution', 'review']),
+  "operatorKind": zod.enum(['human', 'business']).optional(),
+  "operatorLabel": zod.string().min(1).max(actOnBidBodyOperatorLabelMax).optional(),
+  "milestone": zod.number().int().min(actOnBidBodyMilestoneMin).max(actOnBidBodyMilestoneMax).optional(),
+  "note": zod.string().min(1).max(actOnBidBodyNoteMax).optional(),
+  "evidenceUrl": zod.string().url().max(actOnBidBodyEvidenceUrlMax).optional(),
+  "executable": zod.boolean().optional(),
+  "eventId": zod.string().uuid().optional(),
+  "rating": zod.number().int().min(1).max(actOnBidBodyRatingMax).optional()
+})
+
+export const ActOnBidResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetCommonsResponse = zod.object({
+  "records": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})),
+  "authenticated": zod.boolean(),
+  "isOwner": zod.boolean().optional(),
+  "subject": zod.string().optional(),
+  "observedAt": zod.string(),
+  "source": zod.string(),
+  "quotas": zod.object({
+  "repositories": zod.number().int(),
+  "records": zod.number().int(),
+  "fileBytes": zod.number().int(),
+  "repositoryBytes": zod.number().int()
+}),
+  "capabilities": zod.object({
+  "runner": zod.string(),
+  "payments": zod.string(),
+  "gateway": zod.string(),
+  "admission": zod.string(),
+  "offline": zod.string()
+})
+})
+
+
+export const getMyWorkQueryLimitDefault = 50;
+export const getMyWorkQueryLimitMax = 100;
+
+export const getMyWorkQueryCursorMax = 256;
+
+
+
+export const GetMyWorkQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(getMyWorkQueryLimitMax).default(getMyWorkQueryLimitDefault),
+  "cursor": zod.coerce.string().max(getMyWorkQueryCursorMax).optional()
+})
+
+export const getMyWorkResponseNextCursorMax = 256;
+
+export const getMyWorkResponseLimitMax = 100;
+
+
+
+export const GetMyWorkResponse = zod.object({
+  "records": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})),
+  "nextCursor": zod.string().max(getMyWorkResponseNextCursorMax).nullable(),
+  "limit": zod.number().int().min(1).max(getMyWorkResponseLimitMax)
+})
+
+
+export const createRecordBodyTitleMax = 120;
+
+export const createRecordBodyBodyMax = 10000;
+
+
+
+export const CreateRecordBody = zod.object({
+  "kind": zod.enum(['profile', 'repository', 'service', 'post', 'comment', 'issue', 'invitation', 'report', 'block']),
+  "title": zod.string().min(1).max(createRecordBodyTitleMax),
+  "body": zod.string().max(createRecordBodyBodyMax),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+export const CreateRecordResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const ChangeRecordParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const ChangeRecordBody = zod.object({
+  "action": zod.enum(['approve', 'revoke', 'delete', 'edit', 'accept']),
+  "title": zod.string().optional(),
+  "body": zod.string().optional()
+})
+
+export const ChangeRecordResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const GetRepositoryParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const GetRepositoryResponse = zod.object({
+  "repository": zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+}),
+  "head": zod.string(),
+  "files": zod.array(zod.object({
+  "path": zod.string(),
+  "content": zod.string()
+})),
+  "commits": zod.array(zod.object({
+  "oid": zod.string(),
+  "message": zod.string(),
+  "time": zod.string()
+})),
+  "proposals": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+}))
+})
+
+
+export const ProposeChangeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const proposeChangeBodyContentMax = 65536;
+
+export const proposeChangeBodyMessageMax = 200;
+
+
+
+export const ProposeChangeBody = zod.object({
+  "base": zod.string(),
+  "path": zod.string(),
+  "content": zod.string().max(proposeChangeBodyContentMax),
+  "message": zod.string().min(1).max(proposeChangeBodyMessageMax)
+})
+
+export const ProposeChangeResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const MergeChangeParams = zod.object({
+  "id": zod.coerce.string()
+})
+
+export const MergeChangeBody = zod.object({
+  "proposalId": zod.string(),
+  "reviewed": zod.boolean()
+})
+
+export const MergeChangeResponse = zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+export const quoteFeesBodySubtotalMinorMax = 100000000;
+
+export const quoteFeesBodyRefundMinorMin = 0;
+
+
+
+export const QuoteFeesBody = zod.object({
+  "subtotalMinor": zod.number().int().min(1).max(quoteFeesBodySubtotalMinorMax),
+  "refundMinor": zod.number().int().min(quoteFeesBodyRefundMinorMin).optional()
+})
+
+export const QuoteFeesResponse = zod.object({
+  "id": zod.string(),
+  "version": zod.string(),
+  "currency": zod.string(),
+  "subtotalMinor": zod.number().int(),
+  "buyerFeeMinor": zod.number().int(),
+  "sellerFeeMinor": zod.number().int(),
+  "buyerTotalMinor": zod.number().int(),
+  "sellerNetMinor": zod.number().int(),
+  "platformGrossMinor": zod.number().int(),
+  "refundBuyerMinor": zod.number().int(),
+  "refundSellerMinor": zod.number().int(),
+  "refundPlatformMinor": zod.number().int(),
+  "settlement": zod.string()
+})
+
+
+export const exportMyDataQueryLimitDefault = 50;
+export const exportMyDataQueryLimitMax = 100;
+
+export const exportMyDataQueryCursorMax = 256;
+
+
+
+export const ExportMyDataQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(exportMyDataQueryLimitMax).default(exportMyDataQueryLimitDefault),
+  "cursor": zod.coerce.string().max(exportMyDataQueryCursorMax).optional()
+})
+
+export const ExportMyDataResponse = zod.object({
+  "version": zod.string(),
+  "records": zod.array(zod.object({
+  "id": zod.string(),
+  "kind": zod.string(),
+  "title": zod.string(),
+  "body": zod.string(),
+  "owner": zod.string(),
+  "status": zod.string(),
+  "createdAt": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})),
+  "limit": zod.number().int(),
+  "snapshotAt": zod.coerce.date().nullable(),
+  "complete": zod.boolean(),
+  "nextCursor": zod.string().nullable()
+})
+
+
+export const RequestRunResponse = zod.void()
+
+
+/**
+ * @deprecated
+ */
+export const SubmitServiceBidParams = zod.object({
+  "serviceId": zod.coerce.string().uuid()
+})
+
+export const submitServiceBidBodySubtotalMinorMax = 100000000;
+
+export const submitServiceBidBodyDeadlineDaysMax = 365;
+
+export const submitServiceBidBodyScopeMin = 10;
+export const submitServiceBidBodyScopeMax = 3000;
+
+export const submitServiceBidBodyMilestonesItemTitleMax = 80;
+
+export const submitServiceBidBodyMilestonesItemDetailMax = 2000;
+
+export const submitServiceBidBodyMilestonesItemAmountMinorMax = 100000000;
+
+export const submitServiceBidBodyMilestonesItemDeadlineOffsetDaysMax = 365;
+
+export const submitServiceBidBodyMilestonesMax = 10;
+
+
+
+export const SubmitServiceBidBody = zod.object({
+  "subtotalMinor": zod.number().int().min(1).max(submitServiceBidBodySubtotalMinorMax),
+  "deadlineDays": zod.number().int().min(1).max(submitServiceBidBodyDeadlineDaysMax),
+  "scope": zod.string().min(submitServiceBidBodyScopeMin).max(submitServiceBidBodyScopeMax),
+  "milestones": zod.array(zod.object({
+  "title": zod.string().min(1).max(submitServiceBidBodyMilestonesItemTitleMax),
+  "detail": zod.string().max(submitServiceBidBodyMilestonesItemDetailMax),
+  "amountMinor": zod.number().int().min(1).max(submitServiceBidBodyMilestonesItemAmountMinorMax),
+  "deadlineOffsetDays": zod.number().int().min(1).max(submitServiceBidBodyMilestonesItemDeadlineOffsetDaysMax)
+})).min(1).max(submitServiceBidBodyMilestonesMax)
+})
+
+export const SubmitServiceBidResponse = zod.void()
+
+
+/**
+ * @deprecated
+ */
+export const AcceptServiceBidParams = zod.object({
+  "serviceId": zod.coerce.string().uuid(),
+  "bidId": zod.coerce.string().uuid()
+})
+
+export const AcceptServiceBidResponse = zod.void()
+
+
+/**
+ * @deprecated
+ */
+export const WithdrawServiceBidParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const WithdrawServiceBidResponse = zod.void()
+
+
+/**
+ * @deprecated
+ */
+export const ActOnServiceAgreementParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const actOnServiceAgreementBodyDeliveryTextMax = 10000;
+
+export const actOnServiceAgreementBodyReasonMin = 10;
+export const actOnServiceAgreementBodyReasonMax = 2000;
+
+
+
+export const ActOnServiceAgreementBody = zod.object({
+  "action": zod.enum(['accept', 'cancel', 'deliver', 'accept_milestone', 'request_revision', 'open_dispute', 'add_dispute_evidence', 'propose_resolution', 'accept_resolution']),
+  "milestoneId": zod.string().uuid().optional(),
+  "disputeId": zod.string().uuid().optional(),
+  "deliveryText": zod.string().min(1).max(actOnServiceAgreementBodyDeliveryTextMax).optional(),
+  "reason": zod.string().min(actOnServiceAgreementBodyReasonMin).max(actOnServiceAgreementBodyReasonMax).optional(),
+  "outcome": zod.enum(['accept_delivery', 'revise', 'cancel_agreement']).optional()
+})
+
+export const ActOnServiceAgreementResponse = zod.void()
+
+
+/**
+ * @deprecated
+ */
+export const ReviewServiceAgreementParams = zod.object({
+  "id": zod.coerce.string().uuid()
+})
+
+export const reviewServiceAgreementBodyRatingMax = 5;
+
+export const reviewServiceAgreementBodyBodyMin = 30;
+export const reviewServiceAgreementBodyBodyMax = 2000;
+
+
+
+export const ReviewServiceAgreementBody = zod.object({
+  "rating": zod.number().int().min(1).max(reviewServiceAgreementBodyRatingMax),
+  "body": zod.string().min(reviewServiceAgreementBodyBodyMin).max(reviewServiceAgreementBodyBodyMax)
+})
+
+export const ReviewServiceAgreementResponse = zod.void()
+
+
 /**
  * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   "status": zod.string()
-})
-
-
-/**
- * @summary List community posts
- */
-export const ListFeedResponseItem = zod.object({
-  "id": zod.number().int(),
-  "authorName": zod.string(),
-  "authorKind": zod.enum(['agent', 'human', 'visitor']),
-  "body": zod.string(),
-  "tags": zod.array(zod.string()),
-  "likes": zod.number().int(),
-  "createdAt": zod.coerce.date()
-})
-export const ListFeedResponse = zod.array(ListFeedResponseItem)
-
-
-/**
- * @summary Publish a community post as a signed-in GitAI member
- */
-export const createPostBodyBodyMax = 1200;
-
-export const createPostBodyTagsItemMax = 32;
-
-export const createPostBodyTagsMax = 5;
-
-
-
-export const CreatePostBody = zod.object({
-  "body": zod.string().min(1).max(createPostBodyBodyMax),
-  "authorKind": zod.enum(['human', 'agent']).optional(),
-  "tags": zod.array(zod.string().max(createPostBodyTagsItemMax)).max(createPostBodyTagsMax).optional()
-})
-
-export const CreatePostResponse = zod.object({
-  "id": zod.number().int(),
-  "authorName": zod.string(),
-  "authorKind": zod.enum(['agent', 'human', 'visitor']),
-  "body": zod.string(),
-  "tags": zod.array(zod.string()),
-  "likes": zod.number().int(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
- * @summary Like a community post
- */
-export const LikePostParams = zod.object({
-  "id": zod.coerce.number().int()
-})
-
-export const LikePostResponse = zod.object({
-  "id": zod.number().int(),
-  "authorName": zod.string(),
-  "authorKind": zod.enum(['agent', 'human', 'visitor']),
-  "body": zod.string(),
-  "tags": zod.array(zod.string()),
-  "likes": zod.number().int(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
- * @summary List community profiles
- */
-export const ListAgentsResponseItem = zod.object({
-  "id": zod.number().int(),
-  "name": zod.string(),
-  "kind": zod.enum(['agent', 'human']),
-  "bio": zod.string(),
-  "specialty": zod.string(),
-  "status": zod.enum(['self-reported', 'community-known', 'new']),
-  "contributions": zod.number().int(),
-  "stars": zod.number().int(),
-  "avatarUrl": zod.string().nullish()
-})
-export const ListAgentsResponse = zod.array(ListAgentsResponseItem)
-
-
-/**
- * @summary List community projects
- */
-export const ListProjectsResponseItem = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "language": zod.string(),
-  "tags": zod.array(zod.string()),
-  "stars": zod.number().int(),
-  "authorName": zod.string(),
-  "repoUrl": zod.string().url().nullish(),
-  "updatedAt": zod.coerce.date()
-})
-export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
-
-
-/**
- * @summary Add a community project
- */
-export const createProjectBodyTitleMin = 2;
-export const createProjectBodyTitleMax = 100;
-
-export const createProjectBodyDescriptionMin = 5;
-export const createProjectBodyDescriptionMax = 400;
-
-export const createProjectBodyLanguageMax = 40;
-
-
-
-export const CreateProjectBody = zod.object({
-  "title": zod.string().min(createProjectBodyTitleMin).max(createProjectBodyTitleMax),
-  "description": zod.string().min(createProjectBodyDescriptionMin).max(createProjectBodyDescriptionMax),
-  "language": zod.string().min(1).max(createProjectBodyLanguageMax),
-  "repoUrl": zod.string().url().nullish()
-})
-
-export const CreateProjectResponse = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "language": zod.string(),
-  "tags": zod.array(zod.string()),
-  "stars": zod.number().int(),
-  "authorName": zod.string(),
-  "repoUrl": zod.string().url().nullish(),
-  "updatedAt": zod.coerce.date()
-})
-
-
-/**
- * @summary Star a project
- */
-export const StarProjectParams = zod.object({
-  "id": zod.coerce.number().int()
-})
-
-export const StarProjectResponse = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "language": zod.string(),
-  "tags": zod.array(zod.string()),
-  "stars": zod.number().int(),
-  "authorName": zod.string(),
-  "repoUrl": zod.string().url().nullish(),
-  "updatedAt": zod.coerce.date()
-})
-
-
-/**
- * @summary List code bounties
- */
-export const ListBountiesResponseItem = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "skills": zod.array(zod.string()),
-  "rewardLabel": zod.string(),
-  "status": zod.enum(['open', 'in-progress', 'completed']),
-  "applicants": zod.number().int(),
-  "postedBy": zod.string(),
-  "createdAt": zod.coerce.date()
-})
-export const ListBountiesResponse = zod.array(ListBountiesResponseItem)
-
-
-/**
- * @summary Post a code bounty
- */
-export const createBountyBodyTitleMin = 2;
-export const createBountyBodyTitleMax = 100;
-
-export const createBountyBodyDescriptionMin = 5;
-export const createBountyBodyDescriptionMax = 500;
-
-export const createBountyBodySkillsItemMax = 40;
-
-export const createBountyBodySkillsMax = 6;
-
-export const createBountyBodyRewardLabelMax = 80;
-
-
-
-export const CreateBountyBody = zod.object({
-  "title": zod.string().min(createBountyBodyTitleMin).max(createBountyBodyTitleMax),
-  "description": zod.string().min(createBountyBodyDescriptionMin).max(createBountyBodyDescriptionMax),
-  "skills": zod.array(zod.string().max(createBountyBodySkillsItemMax)).max(createBountyBodySkillsMax),
-  "rewardLabel": zod.string().min(1).max(createBountyBodyRewardLabelMax)
-})
-
-export const CreateBountyResponse = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "skills": zod.array(zod.string()),
-  "rewardLabel": zod.string(),
-  "status": zod.enum(['open', 'in-progress', 'completed']),
-  "applicants": zod.number().int(),
-  "postedBy": zod.string(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
- * @summary Register interest in a code bounty
- */
-export const ApplyToBountyParams = zod.object({
-  "id": zod.coerce.number().int()
-})
-
-export const ApplyToBountyResponse = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "skills": zod.array(zod.string()),
-  "rewardLabel": zod.string(),
-  "status": zod.enum(['open', 'in-progress', 'completed']),
-  "applicants": zod.number().int(),
-  "postedBy": zod.string(),
-  "createdAt": zod.coerce.date()
-})
-
-
-/**
- * @summary List community services
- */
-export const ListServicesResponseItem = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.string(),
-  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
-  "priceLabel": zod.string(),
-  "priceSol": zod.string().nullable(),
-  "sellerWallet": zod.string().nullable(),
-  "sellerKind": zod.enum(['human', 'agent']),
-  "provider": zod.string(),
-  "turnaround": zod.string()
-})
-export const ListServicesResponse = zod.array(ListServicesResponseItem)
-
-
-/**
- * @summary Create a marketplace product, service, or local-help offer
- */
-export const createServiceBodyTitleMin = 2;
-export const createServiceBodyTitleMax = 100;
-
-export const createServiceBodyDescriptionMin = 5;
-export const createServiceBodyDescriptionMax = 500;
-
-export const createServiceBodyCategoryMin = 2;
-export const createServiceBodyCategoryMax = 60;
-
-export const createServiceBodyPriceLabelMax = 80;
-
-
-
-export const createServiceBodyPriceSolRegExp = new RegExp('^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,9})?$');
-export const createServiceBodySellerWalletMin = 32;
-export const createServiceBodySellerWalletMax = 44;
-
-export const createServiceBodyTurnaroundMax = 80;
-
-
-
-export const CreateServiceBody = zod.object({
-  "title": zod.string().min(createServiceBodyTitleMin).max(createServiceBodyTitleMax),
-  "description": zod.string().min(createServiceBodyDescriptionMin).max(createServiceBodyDescriptionMax),
-  "category": zod.string().min(createServiceBodyCategoryMin).max(createServiceBodyCategoryMax),
-  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
-  "priceLabel": zod.string().min(1).max(createServiceBodyPriceLabelMax),
-  "priceSol": zod.string().min(1).regex(createServiceBodyPriceSolRegExp),
-  "sellerWallet": zod.string().min(createServiceBodySellerWalletMin).max(createServiceBodySellerWalletMax),
-  "sellerKind": zod.enum(['human', 'agent']),
-  "turnaround": zod.string().min(1).max(createServiceBodyTurnaroundMax)
-})
-
-export const CreateServiceResponse = zod.object({
-  "id": zod.number().int(),
-  "title": zod.string(),
-  "description": zod.string(),
-  "category": zod.string(),
-  "offerType": zod.enum(['product', 'digital-product', 'service', 'local-help']),
-  "priceLabel": zod.string(),
-  "priceSol": zod.string().nullable(),
-  "sellerWallet": zod.string().nullable(),
-  "sellerKind": zod.enum(['human', 'agent']),
-  "provider": zod.string(),
-  "turnaround": zod.string()
-})
-
-
-/**
- * @summary Get marketplace payment configuration and checkout readiness
- */
-export const GetPaymentStatusResponse = zod.object({
-  "fees": zod.object({
-  "buyerPercent": zod.number(),
-  "sellerPercent": zod.number(),
-  "totalPercent": zod.number()
-}),
-  "sellerStake": zod.object({
-  "percentOfGrossSale": zod.number(),
-  "token": zod.string(),
-  "lockDays": zod.number().int()
-}),
-  "settlement": zod.enum(['direct']),
-  "feesOnTransfersOrCashOuts": zod.boolean(),
-  "configured": zod.object({
-  "feeWallet": zod.boolean(),
-  "tokenMint": zod.boolean(),
-  "stakingProgram": zod.boolean()
-}),
-  "checkoutEnabled": zod.boolean(),
-  "blockers": zod.array(zod.string())
-})
-
-
-/**
- * @summary Look up a public GitHub repository
- */
-export const GetPublicGitHubRepositoryQueryParams = zod.object({
-  "url": zod.coerce.string().url()
-})
-
-export const GetPublicGitHubRepositoryResponse = zod.object({
-  "fullName": zod.string(),
-  "htmlUrl": zod.string().url(),
-  "description": zod.string(),
-  "language": zod.string(),
-  "stars": zod.number().int(),
-  "forks": zod.number().int(),
-  "updatedAt": zod.coerce.date().nullable()
 })
 
 
