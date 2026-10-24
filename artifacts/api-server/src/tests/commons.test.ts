@@ -139,8 +139,8 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     assert.equal((await actOnBid(bob, child.id, { action: "consent", operatorKind: "business", operatorLabel: "Synthetic company operator" })).status, "active");
     assert.equal((await commons.listPrivateWork(bob)).records.some(r => r.id === child.id), true);
     await assert.rejects(createBid(carol, { ...terms, parentBidId: child.id, sellerSubject: outsider }), /Further subcontract/);
-    await assert.rejects(actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Bad link", executable: false, evidenceUrl: "http://example.com" }), /HTTPS/);
-    let work = await actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Manual report: found ambiguous wording.", executable: false, evidenceUrl: "https://example.com/report" });
+    await assert.rejects(actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Bad link", executable: false, evidenceUrl: "http://evidence.example" }), /HTTPS/);
+    let work = await actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "Manual report: found ambiguous wording.", executable: false, evidenceUrl: "https://evidence.example/report" });
     type Audit = { id: string; action: string };
     const latest = (r: typeof work, action: string) => (r.data.events as Audit[]).filter(e => e.action === action).at(-1)!.id;
     const delivery = latest(work, "deliver");
@@ -158,7 +158,7 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     work = await actOnBid(alice, bid.id, { action: "dispute", eventId: acceptance, note: "Dispute the buyer's additional interpretation." });
     assert.equal(work.status, "disputed");
     await assert.rejects(actOnBid(alice, bid.id, { action: "deliver", milestone: 0, note: "While disputed", executable: false }), /active/);
-    work = await actOnBid(bob, bid.id, { action: "evidence", note: "Original scope excludes additional work.", evidenceUrl: "https://example.com/scope" });
+    work = await actOnBid(bob, bid.id, { action: "evidence", note: "Original scope excludes additional work.", evidenceUrl: "https://evidence.example/scope" });
     work = await actOnBid(alice, bid.id, { action: "propose-resolution", note: "Both acknowledge completion of original scope; no financial action." });
     const resolution = latest(work, "propose-resolution");
     await assert.rejects(actOnBid(alice, bid.id, { action: "agree-resolution", eventId: resolution }), /duplicate/);
