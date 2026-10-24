@@ -8,6 +8,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { releaseReadiness } from "./lib/release-readiness";
+import { csrfGuard } from "./lib/csrf";
 
 const app: Express = express();
 
@@ -61,6 +62,7 @@ app.use((req, res, next) => {
   }
   next();
 });
+app.use(csrfGuard);
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(express.json({ limit: "96kb" }));
 app.use(
