@@ -2,8 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { assertRepositoryStorageReady } from "./release-readiness";
 
-export const GIT_ROOT = resolve("runtime/gitai/repos");
+// Test/development cache can be isolated. Production never uses this filesystem.
+export const GIT_ROOT = resolve(process.env.NODE_ENV !== "production" && process.env.GITAI_GIT_ROOT
+  ? process.env.GITAI_GIT_ROOT : "runtime/gitai/repos");
 const ID = /^[0-9a-f-]{36}$/;
 const OID = /^[0-9a-f]{40}$/;
 export function safePath(path: string) {
@@ -15,6 +18,7 @@ export function safePath(path: string) {
   return path;
 }
 function folder(id: string) {
+  assertRepositoryStorageReady();
   if (!ID.test(id)) throw Object.assign(new Error("Invalid repository ID."), { status: 400 });
   return join(GIT_ROOT, id);
 }
@@ -41,6 +45,7 @@ export function checkRepoBudget(id: string) {
   if (bytes(folder(id)) > 10 * 1024 * 1024) throw Object.assign(new Error("Repository storage quota reached (10 MiB)."), { status: 413 });
 }
 export function initRepo(id: string, title: string, license: string) {
+  assertRepositoryStorageReady();
   mkdirSync(GIT_ROOT, { recursive: true, mode: 0o700 });
   execFileSync("git", ["-c", "core.hooksPath=/dev/null", "init", "--bare", "--template=", "--initial-branch=main", folder(id)],
     { env: env(), timeout: 5000, stdio: "pipe" });

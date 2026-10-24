@@ -22,7 +22,8 @@ collector; app -> **unavailable** independent runner / payments providers.
 | Financial replay/false finality | No payment execution endpoint; deterministic immutable quote ID; integer cumulative refund reconciliation | Actual idempotency, webhook signature verification and ledger reconciliation not built; cannot claim payment safety verified |
 | Offline replay/tampering | Canonical checksum/chain/sequence validation; dedup; reject conflicts; quarantine, safe modes and local reapproval | No signatures/trust/revocation, unverified origins and unencrypted bundles; no financial finality |
 | Secret/PII leak | No raw cards/bank/ID docs; no credential fields, request payload/IP/path logging disabled; limited secret-pattern rejection; public exports opt-in; runtime excluded from Git | Pattern check not full secret/malware scanning; public replication cannot guarantee erasure; legal retention/access review needed |
-| Dependency compromise | Pinned added auth packages/lockfile; audit run; critical advisory fixed | Unpatched braces advisory remains release blocker; current report in VERIFY.md |
+| Dependency compromise | Pinned auth packages/lockfile; current pnpm and dependency scans report zero advisories after GitHub withdrew the former braces advisory, without suppression | Zero audit findings is not a guarantee; revalidate the exact release head and dependency licenses |
+| Loss of repository objects on deployment | Production readiness/mutations and Git filesystem access fail closed; bounded private recovery codec retains orphan proposal commits and excludes hooks/config | Durable primary adapter, independent remote backup, consistency protocol and real provider restore are not implemented; local recovery tests do not prove cloud durability |
 
 ## Deliberate non-goals / blocked operations
 

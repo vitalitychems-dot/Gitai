@@ -86,10 +86,13 @@ while anonymous and unrelated exports do not.
     Unapproved drafts did not export.
   - Conflicting origin/sequence, tampered checksums, unsafe bundle filenames and
     malformed bundles were rejected without publishing incoming content.
-- `pnpm run test` (also run at the start of the root build) executes five
+- `pnpm run test` executes six
   Marketplace-attention tests: consent and expiry, buyer/seller/nonparticipant
   visibility for every category, upcoming versus overdue seller deadlines,
   delivery decisions and redelivery, and disputed work/resolution responses.
+  It also runs two private snapshot/restore tests and two production-readiness
+  tests through `test:launch`. A separate real HTTP integration test verifies
+  production health and mutations return 503 while durable storage is absent.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
   - Public community/repository/marketplace/people/fees/offline/settings routes
     render; no horizontal page overflow at those sizes.
@@ -101,21 +104,25 @@ while anonymous and unrelated exports do not.
   - Browser screenshots are written outside the repository to `/tmp/gitai-browser-test/`.
 - Visual app preview inspected at desktop; mobile overflow on offline page was
   found in the browser test, fixed, and the acceptance test then passed.
-- GitAI package TypeScript check and production Vite build passed. `/api/healthz`
-  returned 200 during verification; the browser suite's anonymous API checks
-  passed. No deployment, external Git push, outreach or financial operation
-  performed.
+- The API server production bundle and GitAI production Vite build passed.
+  Vite 7.3.7 reports a tooltip source-map warning and a minified chunk above
+  500 kB; neither failed the build. `/api/healthz` returned 200 after the final
+  workflow restart. The browser suite is signed-out only; no authenticated
+  browser mutation was tested. No deployment, external Git push, outreach or
+  financial operation was performed.
 
 ## Reproduce
 
 ```sh
 pnpm run typecheck
-pnpm --filter @workspace/api-server exec esbuild src/tests/commons.test.ts \
-  --bundle --platform=node --format=cjs --external:pg-native \
-  --outfile=dist/commons.test.cjs
-node --test artifacts/api-server/dist/commons.test.cjs
-python tools/test-network-denied.py
-node scripts/src/gitai-browser-test.mjs
+pnpm run test
+pnpm --filter @workspace/scripts exec tsx --test \
+  ../artifacts/api-server/src/tests/commons.test.ts
+node --test tools/gitai-offline.test.mjs
+python3 tools/test-network-denied.py
+pnpm --filter @workspace/scripts exec node src/gitai-browser-test.mjs
+pnpm --filter @workspace/api-server run build
+PORT=22891 BASE_PATH=/ pnpm --filter @workspace/gitai run build
 pnpm audit
 ```
 
@@ -153,8 +160,9 @@ be adjusted before pg 9. No application query uses that test initialization.
 - No LLM calls, collectors, external opportunity discovery, advertisements,
   real payment ledger, refunds processed by a provider, payout, escrow, token,
   chain, wallet/key generation or exchange.
-- No production database, production build/deployment or provider sandbox
-  onboarding/checkout/webhook reconciliation was exercised.
+- No production database, deployment or provider sandbox
+  onboarding/checkout/webhook reconciliation was exercised. Local API and
+  frontend production bundles were built, but this is not a deployment test.
 - Accessibility uses labels, semantic controls, visible focus, reduced motion
   and responsive checks; this is not a complete WCAG audit.
 - Upstream Gitai's complete build was not executed and only selected source
@@ -171,13 +179,15 @@ New auth packages verified on npm as real packages:
 Auth keys were provisioned through the managed setup and referenced at runtime;
 no key values were inspected, hardcoded, returned or put in Git/model prompts.
 
-Audit after fixes: **0 critical, 1 high, 0 moderate, 0 low**.
-Remaining high: `braces 3.0.3`, transitive through `micromatch` in the canonical
-Clerk proxy dependency and existing mockup tooling; audit advertises no patched
-version. It was **not suppressed** or accepted as safe. Patched proxy-addr,
-source-map-js, fast-uri, brace-expansion and selector-parser were applied through
-the lockfile/targeted overrides. A provider/dependency fix or reviewed replacement
-is required before release.
+Current 2026-10-23 audit: **0 critical, 0 high, 0 moderate, 0 low**.
+Vite is now 7.3.7 and markdown-it is 14.3.3, both selected from patched releases
+and verified as MIT before installation. The formerly remaining advisory
+`GHSA-vfj7-8cjw-p6xm` for `braces 3.0.3` was withdrawn by GitHub at
+2026-10-23T12:53:02Z. The package version is unchanged, and the issue was not
+suppressed or claimed patched. Both pnpm audit and the dependency scanner now
+report zero advisories. Earlier lockfile/targeted fixes for proxy-addr, source-map-js, fast-uri,
+brace-expansion and selector-parser remain present. Recheck dependency status
+for the exact future release head.
 
 Data classes: operator display/profile content and hashed auth subjects are
 stored; email/password handled by Clerk, not this database. No cards/CVV/bank/ID
@@ -188,9 +198,16 @@ operations still require review; withdrawal is not a promise of forensic erasure
 
 ## Release decision and rollback
 
-**NO-GO for production.** Dependency advisory, durable Git storage, authenticated
-browser acceptance, owner designation and privacy/moderation review remain.
-Runner/payments/admission cannot be enabled merely by setting a success flag.
+**NO-GO for production or publication from the current task branch.** The
+absent repository license/three development
+plugin license declarations, non-durable Git storage, authenticated browser
+acceptance, owner designation and privacy/moderation review remain. The local
+branch is 18 commits behind canonical `main`, and a merge-tree review reports
+20 conflicts; a direct PR would delete the upstream identity file and required
+`code-gate` workflow/scripts. No PR was opened. The recent cursor-paged/resumable
+personal-export path is not covered by this verification, and saved-export
+cleanup at sign-out/expiry was not exercised. Runner/payments/admission cannot
+be enabled merely by setting a success flag.
 
 Changes are additive to the existing workspace. No existing data tables were
 dropped or migrated to a different provider. To undo code changes, use a Replit
