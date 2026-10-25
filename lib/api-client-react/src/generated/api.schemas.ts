@@ -5,297 +5,409 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+export interface RetiredWorkError {
+  error: string;
+}
+
+export type BidInputOperatorKind = typeof BidInputOperatorKind[keyof typeof BidInputOperatorKind];
+
+
+export const BidInputOperatorKind = {
+  human: 'human',
+  business: 'business',
+} as const;
+
+export interface WorkMilestone {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 2000
+     */
+  scope: string;
+  dueAt: string;
+}
+
+export interface BidInput {
+  serviceId: string;
+  parentBidId?: string;
+  /** @pattern ^[0-9a-f]{64}$ */
+  sellerSubject?: string;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  scope: string;
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  subtotalMinor: number;
+  deadline: string;
+  operatorKind: BidInputOperatorKind;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  operatorLabel: string;
+  consent: true;
+  /**
+     * @minItems 1
+     * @maxItems 20
+     */
+  milestones: WorkMilestone[];
+}
+
+export type BidActionAction = typeof BidActionAction[keyof typeof BidActionAction];
+
+
+export const BidActionAction = {
+  consent: 'consent',
+  withdraw: 'withdraw',
+  deliver: 'deliver',
+  accept: 'accept',
+  reject: 'reject',
+  dispute: 'dispute',
+  evidence: 'evidence',
+  'propose-resolution': 'propose-resolution',
+  'agree-resolution': 'agree-resolution',
+  review: 'review',
+} as const;
+
+export type BidActionOperatorKind = typeof BidActionOperatorKind[keyof typeof BidActionOperatorKind];
+
+
+export const BidActionOperatorKind = {
+  human: 'human',
+  business: 'business',
+} as const;
+
+export interface BidAction {
+  action: BidActionAction;
+  operatorKind?: BidActionOperatorKind;
+  /**
+     * @minLength 1
+     * @maxLength 100
+     */
+  operatorLabel?: string;
+  /**
+     * @minimum 0
+     * @maximum 19
+     */
+  milestone?: number;
+  /**
+     * @minLength 1
+     * @maxLength 4000
+     */
+  note?: string;
+  /** @maxLength 1000 */
+  evidenceUrl?: string;
+  executable?: boolean;
+  eventId?: string;
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating?: number;
+}
+
+export type CommunityRecordData = { [key: string]: unknown };
+
+export interface CommunityRecord {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  owner: string;
+  status: string;
+  createdAt: string;
+  data: CommunityRecordData;
+}
+
+export type RecordInputKind = typeof RecordInputKind[keyof typeof RecordInputKind];
+
+
+export const RecordInputKind = {
+  profile: 'profile',
+  repository: 'repository',
+  service: 'service',
+  post: 'post',
+  comment: 'comment',
+  issue: 'issue',
+  invitation: 'invitation',
+  report: 'report',
+  block: 'block',
+} as const;
+
+export type RecordInputData = { [key: string]: unknown };
+
+export interface RecordInput {
+  kind: RecordInputKind;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  title: string;
+  /** @maxLength 10000 */
+  body: string;
+  data: RecordInputData;
+}
+
+export type RecordChangeAction = typeof RecordChangeAction[keyof typeof RecordChangeAction];
+
+
+export const RecordChangeAction = {
+  approve: 'approve',
+  revoke: 'revoke',
+  delete: 'delete',
+  edit: 'edit',
+  accept: 'accept',
+} as const;
+
+export interface RecordChange {
+  action: RecordChangeAction;
+  title?: string;
+  body?: string;
+}
+
+export type CommonsQuotas = {
+  repositories: number;
+  records: number;
+  fileBytes: number;
+  repositoryBytes: number;
+};
+
+export type CommonsCapabilities = {
+  runner: string;
+  payments: string;
+  gateway: string;
+  admission: string;
+  offline: string;
+};
+
+export interface Commons {
+  records: CommunityRecord[];
+  authenticated: boolean;
+  isOwner?: boolean;
+  subject?: string;
+  observedAt: string;
+  source: string;
+  quotas: CommonsQuotas;
+  capabilities: CommonsCapabilities;
+}
+
+export interface WorkPage {
+  records: CommunityRecord[];
+  /**
+     * @maxLength 256
+     * @nullable
+     */
+  nextCursor: string | null;
+  /**
+     * @minimum 1
+     * @maximum 100
+     */
+  limit: number;
+}
+
+export interface RepoFile {
+  path: string;
+  content: string;
+}
+
+export interface GitCommit {
+  oid: string;
+  message: string;
+  time: string;
+}
+
+export interface RepositoryDetail {
+  repository: CommunityRecord;
+  head: string;
+  files: RepoFile[];
+  commits: GitCommit[];
+  proposals: CommunityRecord[];
+}
+
+export interface ProposalInput {
+  base: string;
+  path: string;
+  /** @maxLength 65536 */
+  content: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  message: string;
+}
+
+export interface MergeInput {
+  proposalId: string;
+  reviewed: boolean;
+}
+
+export interface FeeInput {
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  subtotalMinor: number;
+  /** @minimum 0 */
+  refundMinor?: number;
+}
+
+export interface FeeQuote {
+  id: string;
+  version: string;
+  currency: string;
+  subtotalMinor: number;
+  buyerFeeMinor: number;
+  sellerFeeMinor: number;
+  buyerTotalMinor: number;
+  sellerNetMinor: number;
+  platformGrossMinor: number;
+  refundBuyerMinor: number;
+  refundSellerMinor: number;
+  refundPlatformMinor: number;
+  settlement: string;
+}
+
+export interface ServiceMilestoneInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  title: string;
+  /** @maxLength 2000 */
+  detail: string;
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  amountMinor: number;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  deadlineOffsetDays: number;
+}
+
+export interface ServiceBidInput {
+  /**
+     * @minimum 1
+     * @maximum 100000000
+     */
+  subtotalMinor: number;
+  /**
+     * @minimum 1
+     * @maximum 365
+     */
+  deadlineDays: number;
+  /**
+     * @minLength 10
+     * @maxLength 3000
+     */
+  scope: string;
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  milestones: ServiceMilestoneInput[];
+}
+
+export type ServiceAgreementActionAction = typeof ServiceAgreementActionAction[keyof typeof ServiceAgreementActionAction];
+
+
+export const ServiceAgreementActionAction = {
+  accept: 'accept',
+  cancel: 'cancel',
+  deliver: 'deliver',
+  accept_milestone: 'accept_milestone',
+  request_revision: 'request_revision',
+  open_dispute: 'open_dispute',
+  add_dispute_evidence: 'add_dispute_evidence',
+  propose_resolution: 'propose_resolution',
+  accept_resolution: 'accept_resolution',
+} as const;
+
+export type ServiceAgreementActionOutcome = typeof ServiceAgreementActionOutcome[keyof typeof ServiceAgreementActionOutcome];
+
+
+export const ServiceAgreementActionOutcome = {
+  accept_delivery: 'accept_delivery',
+  revise: 'revise',
+  cancel_agreement: 'cancel_agreement',
+} as const;
+
+export interface ServiceAgreementAction {
+  action: ServiceAgreementActionAction;
+  milestoneId?: string;
+  disputeId?: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  deliveryText?: string;
+  /**
+     * @minLength 10
+     * @maxLength 2000
+     */
+  reason?: string;
+  outcome?: ServiceAgreementActionOutcome;
+}
+
+export interface ServiceReviewInput {
+  /**
+     * @minimum 1
+     * @maximum 5
+     */
+  rating: number;
+  /**
+     * @minLength 30
+     * @maxLength 2000
+     */
+  body: string;
+}
+
+export interface DataExport {
+  version: string;
+  records: CommunityRecord[];
+  limit: number;
+  /** @nullable */
+  snapshotAt: string | null;
+  complete: boolean;
+  /** @nullable */
+  nextCursor: string | null;
+}
+
 export interface HealthStatus {
   status: string;
 }
 
-export type FeedPostAuthorKind = typeof FeedPostAuthorKind[keyof typeof FeedPostAuthorKind];
-
-
-export const FeedPostAuthorKind = {
-  agent: 'agent',
-  human: 'human',
-  visitor: 'visitor',
-} as const;
-
-export interface FeedPost {
-  id: number;
-  authorName: string;
-  authorKind: FeedPostAuthorKind;
-  body: string;
-  tags: string[];
-  likes: number;
-  createdAt: string;
-}
-
-export type PostInputAuthorKind = typeof PostInputAuthorKind[keyof typeof PostInputAuthorKind];
-
-
-export const PostInputAuthorKind = {
-  human: 'human',
-  agent: 'agent',
-} as const;
-
-export interface PostInput {
-  /**
-     * @minLength 1
-     * @maxLength 1200
-     */
-  body: string;
-  authorKind?: PostInputAuthorKind;
-  /**
-     * @maxItems 5
-     * @items.maxLength 32
-     */
-  tags?: string[];
-}
-
-export type AgentProfileKind = typeof AgentProfileKind[keyof typeof AgentProfileKind];
-
-
-export const AgentProfileKind = {
-  agent: 'agent',
-  human: 'human',
-} as const;
-
-export type AgentProfileStatus = typeof AgentProfileStatus[keyof typeof AgentProfileStatus];
-
-
-export const AgentProfileStatus = {
-  'self-reported': 'self-reported',
-  'community-known': 'community-known',
-  new: 'new',
-} as const;
-
-export interface AgentProfile {
-  id: number;
-  name: string;
-  kind: AgentProfileKind;
-  bio: string;
-  specialty: string;
-  status: AgentProfileStatus;
-  contributions: number;
-  stars: number;
-  /** @nullable */
-  avatarUrl?: string | null;
-}
-
-export interface Project {
-  id: number;
-  title: string;
-  description: string;
-  language: string;
-  tags: string[];
-  stars: number;
-  authorName: string;
-  /** @nullable */
-  repoUrl?: string | null;
-  updatedAt: string;
-}
-
-export interface ProjectInput {
-  /**
-     * @minLength 2
-     * @maxLength 100
-     */
-  title: string;
-  /**
-     * @minLength 5
-     * @maxLength 400
-     */
-  description: string;
-  /**
-     * @minLength 1
-     * @maxLength 40
-     */
-  language: string;
-  /** @nullable */
-  repoUrl?: string | null;
-}
-
-export type BountyStatus = typeof BountyStatus[keyof typeof BountyStatus];
-
-
-export const BountyStatus = {
-  open: 'open',
-  'in-progress': 'in-progress',
-  completed: 'completed',
-} as const;
-
-export interface Bounty {
-  id: number;
-  title: string;
-  description: string;
-  skills: string[];
-  rewardLabel: string;
-  status: BountyStatus;
-  applicants: number;
-  postedBy: string;
-  createdAt: string;
-}
-
-export interface BountyInput {
-  /**
-     * @minLength 2
-     * @maxLength 100
-     */
-  title: string;
-  /**
-     * @minLength 5
-     * @maxLength 500
-     */
-  description: string;
-  /**
-     * @maxItems 6
-     * @items.maxLength 40
-     */
-  skills: string[];
-  /**
-     * @minLength 1
-     * @maxLength 80
-     */
-  rewardLabel: string;
-}
-
-export type ServiceListingOfferType = typeof ServiceListingOfferType[keyof typeof ServiceListingOfferType];
-
-
-export const ServiceListingOfferType = {
-  product: 'product',
-  'digital-product': 'digital-product',
-  service: 'service',
-  'local-help': 'local-help',
-} as const;
-
-export type ServiceListingSellerKind = typeof ServiceListingSellerKind[keyof typeof ServiceListingSellerKind];
-
-
-export const ServiceListingSellerKind = {
-  human: 'human',
-  agent: 'agent',
-} as const;
-
-export interface ServiceListing {
-  id: number;
-  title: string;
-  description: string;
-  category: string;
-  offerType: ServiceListingOfferType;
-  priceLabel: string;
-  /** @nullable */
-  priceSol: string | null;
-  /** @nullable */
-  sellerWallet: string | null;
-  sellerKind: ServiceListingSellerKind;
-  provider: string;
-  turnaround: string;
-}
-
-export type ServiceInputOfferType = typeof ServiceInputOfferType[keyof typeof ServiceInputOfferType];
-
-
-export const ServiceInputOfferType = {
-  product: 'product',
-  'digital-product': 'digital-product',
-  service: 'service',
-  'local-help': 'local-help',
-} as const;
-
-export type ServiceInputSellerKind = typeof ServiceInputSellerKind[keyof typeof ServiceInputSellerKind];
-
-
-export const ServiceInputSellerKind = {
-  human: 'human',
-  agent: 'agent',
-} as const;
-
-export interface ServiceInput {
-  /**
-     * @minLength 2
-     * @maxLength 100
-     */
-  title: string;
-  /**
-     * @minLength 5
-     * @maxLength 500
-     */
-  description: string;
-  /**
-     * @minLength 2
-     * @maxLength 60
-     */
-  category: string;
-  offerType: ServiceInputOfferType;
-  /**
-     * @minLength 1
-     * @maxLength 80
-     */
-  priceLabel: string;
-  /**
-     * @minLength 1
-     * @pattern ^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,9})?$
-     */
-  priceSol: string;
-  /**
-     * @minLength 32
-     * @maxLength 44
-     */
-  sellerWallet: string;
-  sellerKind: ServiceInputSellerKind;
-  /**
-     * @minLength 1
-     * @maxLength 80
-     */
-  turnaround: string;
-}
-
-export type PaymentStatusFees = {
-  buyerPercent: number;
-  sellerPercent: number;
-  totalPercent: number;
+export type GetMyWorkParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @maxLength 256
+ */
+cursor?: string;
 };
 
-export type PaymentStatusSellerStake = {
-  percentOfGrossSale: number;
-  token: string;
-  lockDays: number;
-};
-
-export type PaymentStatusSettlement = typeof PaymentStatusSettlement[keyof typeof PaymentStatusSettlement];
-
-
-export const PaymentStatusSettlement = {
-  direct: 'direct',
-} as const;
-
-export type PaymentStatusConfigured = {
-  feeWallet: boolean;
-  tokenMint: boolean;
-  stakingProgram: boolean;
-};
-
-export interface PaymentStatus {
-  fees: PaymentStatusFees;
-  sellerStake: PaymentStatusSellerStake;
-  settlement: PaymentStatusSettlement;
-  feesOnTransfersOrCashOuts: boolean;
-  configured: PaymentStatusConfigured;
-  checkoutEnabled: boolean;
-  blockers: string[];
-}
-
-export interface GitHubRepository {
-  fullName: string;
-  htmlUrl: string;
-  description: string;
-  language: string;
-  stars: number;
-  forks: number;
-  /** @nullable */
-  updatedAt: string | null;
-}
-
-export type GetPublicGitHubRepositoryParams = {
-url: string;
+export type ExportMyDataParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+/**
+ * @maxLength 256
+ */
+cursor?: string;
 };
 

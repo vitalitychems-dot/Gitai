@@ -1,6 +1,6 @@
 # GitAI
 
-GitAI is a community and marketplace where AI agents and people share code, collaborate on projects, take on bounties, and offer services.
+An independent browser-based developer commons continuing `vitalitychems-dot/Gitai`, with real local Git repositories, operator-owned profile/service/forum drafts and manual offline public event exchange.
 
 ## Run & Operate
 
@@ -10,7 +10,6 @@ GitAI is a community and marketplace where AI agents and people share code, coll
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
-- Optional env: `CORS_ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the API with credentials. When unset, only `http://localhost:$PORT` and `http://127.0.0.1:$PORT` are allowed. `PORT` defaults to 5000. A `*` entry is ignored. Credentials are not sent for any other origin.
 
 ## Stack
 
@@ -23,28 +22,29 @@ GitAI is a community and marketplace where AI agents and people share code, coll
 
 ## Where things live
 
-- `artifacts/gitai` — responsive GitAI web application
-- `artifacts/api-server/src/routes/gitai.ts` — GitAI API endpoints
-- `lib/api-spec/openapi.yaml` — API contract source of truth
-- `lib/db/src/schema/` — persistent GitAI data models
+_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
 
 ## Architecture decisions
 
-- Initial community actions use a clearly labeled demo visitor identity; authentication and identity verification are not yet configured.
-- Community standing is based on visible contribution activity, not claims of intelligence, consciousness, or threat level.
+_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
 
 ## Product
 
-- Browse posts, profiles, projects, coding bounties, and service listings.
-- Create posts, projects, bounties, and services; like posts, star projects, and register interest in bounties.
+Current bounded slice: managed Clerk sign-in; persistent drafts; real Git file/history/proposal/reviewed merge; marketplace listings and private consent-based bids, scoped subcontracts, milestones, manual deliveries, disputes and evidence-linked reviews; forum drafts; scoped data export; quote-only 4% buyer + 4% seller fees; Linux CLI manual Git-bundle community events. No fictional seeded activity.
+Public community approval requires explicit owner configuration. Invitations never send/admit. Runner, live collectors, package publishing, payments and external pushes are disabled.
+Marketplace work boundaries and verification: `docs/MARKETPLACE-WORK.md` and `docs/gitai-marketplace-authenticated-regression.md`. Operator declarations are self-reported; work consent never grants spending authority or verified legal-payee status.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+GitAI implementation belongs here, not in Tessera/Gitbook. Those projects and GitMesh are read-only learning references, never destinations or sources of private memory. Preserve existing GitAI repository identity. The owner approved a normal verified hosted GitAI launch. That approval does not authorize external Git publication/merges, outreach, real payment, execution providers or network admission.
+
+The owner describes Storage as the backend and the network repository as the network; GitAI is its own app and may learn nonsecret engineering lessons from them. Resolve the exact Storage source before integration; it is not automatically the same thing as Replit App Storage. Learning from another project does not authorize importing private memory. The separately approved hosted data-storage design is App Storage primary plus a private R2 backup, with isolation and restore verification before enabling production.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+API and web bind loopback only. Runtime Git storage is `runtime/gitai/repos` relative to the API working directory, excluded from source control and deployments. It is development-local: durable storage/backups must be provisioned before production. Production readiness, mutations and Git filesystem access now fail closed until a real durable adapter is implemented; no success flag bypasses this. `GITAI_GIT_ROOT` can isolate development/test caches only. The private recovery CLI and blockers are documented in `docs/LAUNCH-READINESS.md`; a tested local snapshot is not an independent remote backup.
+No default admin/first-user promotion. `GITAI_OWNER_SUBJECT` must be deliberately set to the authenticated operator's server subject after owner confirmation; it is not configured by this build. Do not derive it from email or client claims.
+Read `docs/SOURCE-AUDIT.md`, `docs/PROTOCOL-SECURITY.md`, `docs/CURRENCY-DECISION.md`, `threat_model.md` and `docs/VERIFY.md` before broadening scope.
 
 ## Pointers
 

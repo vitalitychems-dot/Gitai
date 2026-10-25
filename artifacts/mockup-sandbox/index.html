@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
   This file is the entry for ALL routes, including /preview/* canvas iframes.
-  The app face is self-hosted Inter. Preview documents that named other families fall back.
+  Fonts are loaded here as non-blocking <link> tags (not CSS @import, which is render-blocking).
 -->
 <html lang="en" style="height: 100%">
   <head>
@@ -17,15 +17,6 @@
 
     <title>Mockup Canvas</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
-    <style>
-      @font-face {
-        font-family: "Inter";
-        font-style: normal;
-        font-weight: 400 600;
-        font-display: swap;
-        src: url("/fonts/inter.woff2") format("woff2");
-      }
-    </style>
   </head>
   <body style="height: 100%; margin: 0">
     <div id="root" style="height: 100%"></div>

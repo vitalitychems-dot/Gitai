@@ -1,1 +1,4 @@
-- [GitAI marketplace economics](marketplace-economics.md) — keep the 8% fee split and 5% per-sale 30-day token lock consistent; never enable checkout without on-chain enforcement.
+- [Fee policy intent](gitai-boundaries.md) — historical wallet/staking code does not authorize extra fees; escrow wording remains undecided.
+- [Browser test environment](browser-test-environment.md) — downloaded Playwright Chromium lacks Nix shared libraries; use system Chromium for trusted app tests.
+- [Marketplace consent](marketplace-consent.md) — scoped work consent is not verified identity, legal-payee approval or financial authorization.
+- [GitAI source review](gitai-source-review.md) — reconcile the local branch with canonical main and preserve upstream identity and security gates before any publication.

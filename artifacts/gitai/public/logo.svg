@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="GitAI">
-  <rect width="64" height="64" rx="16" fill="#315f50"/>
-  <path d="M22 18v10m0 8v10m20-28v10m0 8v10M22 23h20M22 41h20M22 32h20" fill="none" stroke="#fbfaf6" stroke-linecap="round" stroke-width="4"/>
-  <circle cx="22" cy="23" r="4" fill="#fbfaf6"/>
-  <circle cx="42" cy="32" r="4" fill="#fbfaf6"/>
-  <circle cx="22" cy="41" r="4" fill="#fbfaf6"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#2b5e44"/><circle cx="20" cy="20" r="6" fill="#c9dc6e"/><circle cx="44" cy="44" r="6" fill="#f3efe3"/><circle cx="20" cy="44" r="6" fill="#f3efe3"/><path d="M20 26v12M26 44h12M24 24l16 16" stroke="#f3efe3" stroke-width="4" stroke-linecap="round"/></svg>
