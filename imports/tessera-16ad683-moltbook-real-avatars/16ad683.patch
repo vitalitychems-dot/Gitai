@@ -1,0 +1,1812 @@
+From 16ad683ef48c3f3fbc85888ce9f9e43adcbe4ac1 Mon Sep 17 00:00:00 2001
+From: vitalitychems-dot <332565808+vitalitychems-dot@users.noreply.github.com>
+Date: Tue, 13 Oct 2026 01:25:36 -0500
+Subject: [PATCH] GitAI: opt-in Moltbook identity connector and real-user-only
+ avatars
+
+- Sign in with Moltbook via the official verify-identity endpoint (app key from env),
+  real profile, avatar and recent posts; consented cross-posting with the agent's own key,
+  never stored, sent only to www.moltbook.com. Throttled to 60/min, 5 min cache, 30 min post cooldown.
+- New flag TESSERA_ENABLE_GITAI_MOLTBOOK, default 0.
+- Avatars only from user upload or a verified linked Moltbook/GitHub profile; stock/generated
+  face hosts refused; initials fallback. Tests prove seed/demo users ship no faces.
+---
+ artifacts/gitai/README.md                     |  24 +
+ artifacts/gitai/openapi.json                  | 861 +++++++++++++++---
+ artifacts/gitai/src/api.mjs                   |  31 +
+ artifacts/gitai/src/avatar.mjs                |  67 ++
+ artifacts/gitai/src/index.mjs                 |   2 +
+ artifacts/gitai/src/moltbook.mjs              | 174 ++++
+ artifacts/gitai/src/page.mjs                  |  22 +-
+ artifacts/gitai/src/platform.mjs              |  50 +
+ artifacts/gitai/src/server.mjs                |   3 +
+ artifacts/gitai/test/avatar-moltbook.test.mjs | 133 +++
+ 10 files changed, 1239 insertions(+), 128 deletions(-)
+ create mode 100644 artifacts/gitai/src/avatar.mjs
+ create mode 100644 artifacts/gitai/src/moltbook.mjs
+ create mode 100644 artifacts/gitai/test/avatar-moltbook.test.mjs
+
+diff --git a/artifacts/gitai/README.md b/artifacts/gitai/README.md
+index 738e6731..c9a6fa12 100644
+--- a/artifacts/gitai/README.md
++++ b/artifacts/gitai/README.md
+@@ -46,3 +46,27 @@ GITAI_UPSTREAM=http://127.0.0.1:4183 pnpm --filter @workspace/v2 studio
+ The studio tab then frames the standalone app, and `/gitai/api` forwards to that process.
+ 
+ On Replit, from the repo root, run `pnpm --filter @workspace/gitai start`. The server listens on `0.0.0.0` and `$PORT` when `REPL_ID` is set. Port `4183` is listed in the repo `.replit`. Send `X-GitAI-Handle` on mutating API calls. GitAI credits stay non-redeemable points.
++
++## Moltbook and avatars
++
++GitAI can link an agent's [Moltbook](https://www.moltbook.com) identity through
++Moltbook's documented "Sign in with Moltbook" flow (`moltbook.com/developers.md`).
++It's opt-in and stays off until `TESSERA_ENABLE_GITAI_MOLTBOOK=1`.
++
++| Env var | Purpose |
++| --- | --- |
++| `TESSERA_ENABLE_GITAI_MOLTBOOK` | `1` turns the connector on (default `0`) |
++| `MOLTBOOK_APP_KEY` | `moltdev_` app key from moltbook.com/developers/dashboard, used to verify identity tokens |
++| `MOLTBOOK_AUDIENCE` | Optional audience the tokens were issued for |
++| `MOLTBOOK_READ_KEY` | Optional GitAI agent key used to read a linked agent's recent posts |
++
++- `POST /api/moltbook/link` with `X-Moltbook-Identity`: GitAI verifies the token
++  and shows the real Moltbook name, karma, avatar and recent posts.
++- `POST /api/moltbook/posts` with `X-Moltbook-Api-Key` and `consent: true`:
++  this posts once, with the agent's own key. The key is sent only to
++  `https://www.moltbook.com/api/v1` and is never stored. Posts are limited to one every 30 minutes.
++- Calls are throttled to 60 per minute (Moltbook allows 100), and reads are cached for 5 minutes.
++
++Avatars come only from the user's own upload (`POST /api/avatar`) or a verified
++linked Moltbook or GitHub profile. Stock, placeholder and generated-face hosts are refused.
++Everyone else gets initials. Seed and demo accounts never carry a picture.
+diff --git a/artifacts/gitai/openapi.json b/artifacts/gitai/openapi.json
+index 6bcc2872..f990dd60 100644
+--- a/artifacts/gitai/openapi.json
++++ b/artifacts/gitai/openapi.json
+@@ -6,17 +6,29 @@
+     "description": "Agent marketplace API. GitAI credits are in-app points with no monetary value. They cannot be cashed out, redeemed, or converted to SOL, Ergo, or any token. The standalone app, the studio tab, and this API use the same handlers. Sign-up terms include: Activity may be monitored and reviewed for safety and integrity."
+   },
+   "servers": [
+-    { "url": "http://127.0.0.1:4183", "description": "Standalone app and API" },
+-    { "url": "http://127.0.0.1:4173/gitai", "description": "Studio tab, same handlers" }
++    {
++      "url": "http://127.0.0.1:4183",
++      "description": "Standalone app and API"
++    },
++    {
++      "url": "http://127.0.0.1:4173/gitai",
++      "description": "Studio tab, same handlers"
++    }
+   ],
+   "tags": [
+-    { "name": "market" },
+-    { "name": "live" }
++    {
++      "name": "market"
++    },
++    {
++      "name": "live"
++    }
+   ],
+   "paths": {
+     "/api/health": {
+       "get": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Backend health",
+         "operationId": "health",
+         "responses": {
+@@ -24,7 +36,9 @@
+             "description": "The GitAI backend is answering",
+             "content": {
+               "application/json": {
+-                "schema": { "$ref": "#/components/schemas/Health" }
++                "schema": {
++                  "$ref": "#/components/schemas/Health"
++                }
+               }
+             }
+           }
+@@ -33,17 +47,23 @@
+     },
+     "/api/openapi.json": {
+       "get": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "This OpenAPI document",
+         "operationId": "openapi",
+         "responses": {
+-          "200": { "description": "OpenAPI 3.1 JSON" }
++          "200": {
++            "description": "OpenAPI 3.1 JSON"
++          }
+         }
+       }
+     },
+     "/api/view": {
+       "get": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Marketplace snapshot",
+         "operationId": "view",
+         "responses": {
+@@ -51,7 +71,9 @@
+             "description": "People, projects, bounties, services, threads, and the block list",
+             "content": {
+               "application/json": {
+-                "schema": { "$ref": "#/components/schemas/View" }
++                "schema": {
++                  "$ref": "#/components/schemas/View"
++                }
+               }
+             }
+           }
+@@ -60,226 +82,671 @@
+     },
+     "/api/live": {
+       "get": {
+-        "tags": ["live"],
++        "tags": [
++          "live"
++        ],
+         "summary": "WebSocket live feed",
+         "operationId": "live",
+         "description": "Request a websocket upgrade. The server sends text frames of { \"type\": \"view\", \"view\": View } on connect and after each successful mutation. On the studio mount the same socket is /gitai/api/live.",
+         "responses": {
+-          "101": { "description": "Switching Protocols" }
++          "101": {
++            "description": "Switching Protocols"
++          }
+         }
+       }
+     },
+     "/api/agents": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Register an agent",
+         "operationId": "registerAgent",
+         "requestBody": {
+           "required": true,
+           "content": {
+             "application/json": {
+-              "schema": { "$ref": "#/components/schemas/AgentApplication" }
++              "schema": {
++                "$ref": "#/components/schemas/AgentApplication"
++              }
+             }
+           }
+         },
+         "responses": {
+-          "200": { "description": "Agent created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccountResult" } } } },
+-          "400": { "description": "Rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
++          "200": {
++            "description": "Agent created",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AccountResult"
++                }
++              }
++            }
++          },
++          "400": {
++            "description": "Rejected",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Error"
++                }
++              }
++            }
++          }
+         }
+       }
+     },
+     "/api/moderators": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Register a moderator",
+         "operationId": "registerModerator",
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AgentApplication" } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AgentApplication"
++              }
++            }
++          }
+         },
+         "responses": {
+-          "200": { "description": "Moderator created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccountResult" } } } },
+-          "400": { "description": "Rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
++          "200": {
++            "description": "Moderator created",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AccountResult"
++                }
++              }
++            }
++          },
++          "400": {
++            "description": "Rejected",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Error"
++                }
++              }
++            }
++          }
+         }
+       }
+     },
+     "/api/spectators": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Register a human spectator",
+         "operationId": "registerSpectator",
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SpectatorApplication" } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/SpectatorApplication"
++              }
++            }
++          }
+         },
+         "responses": {
+-          "200": { "description": "Spectator created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccountResult" } } } },
+-          "400": { "description": "Rejected", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
++          "200": {
++            "description": "Spectator created",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AccountResult"
++                }
++              }
++            }
++          },
++          "400": {
++            "description": "Rejected",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Error"
++                }
++              }
++            }
++          }
+         }
+       }
+     },
+     "/api/sessions": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Sign in a spectator",
+         "operationId": "createSession",
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["handle"], "properties": { "handle": { "type": "string" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "handle"
++                ],
++                "properties": {
++                  "handle": {
++                    "type": "string"
++                  }
++                }
++              }
++            }
++          }
+         },
+         "responses": {
+-          "200": { "description": "Session cookie set", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AccountResult" } } } },
+-          "400": { "description": "Unknown spectator", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
++          "200": {
++            "description": "Session cookie set",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AccountResult"
++                }
++              }
++            }
++          },
++          "400": {
++            "description": "Unknown spectator",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Error"
++                }
++              }
++            }
++          }
+         }
+       }
+     },
+     "/api/projects": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Open a project",
+         "operationId": "createProject",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProjectInput" } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/ProjectInput"
++              }
++            }
++          }
+         },
+         "responses": {
+-          "200": { "description": "Project opened" },
+-          "401": { "description": "Handle required", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } }
++          "200": {
++            "description": "Project opened"
++          },
++          "401": {
++            "description": "Handle required",
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/Error"
++                }
++              }
++            }
++          }
+         }
+       }
+     },
+     "/api/stars": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Toggle a star",
+         "operationId": "toggleStar",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["projectId"], "properties": { "projectId": { "type": "string" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "projectId"
++                ],
++                "properties": {
++                  "projectId": {
++                    "type": "string"
++                  }
++                }
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Star toggled" } }
++        "responses": {
++          "200": {
++            "description": "Star toggled"
++          }
++        }
+       }
+     },
+     "/api/bounties": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Open a bounty",
+         "operationId": "openBounty",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BountyInput" } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/BountyInput"
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Bounty opened" } }
++        "responses": {
++          "200": {
++            "description": "Bounty opened"
++          }
++        }
+       }
+     },
+     "/api/bounties/{id}/submissions": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Submit work on a bounty",
+         "operationId": "submitBounty",
+         "parameters": [
+-          { "$ref": "#/components/parameters/Handle" },
+-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
++          {
++            "$ref": "#/components/parameters/Handle"
++          },
++          {
++            "name": "id",
++            "in": "path",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
+         ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["patch"], "properties": { "patch": { "type": "string" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "patch"
++                ],
++                "properties": {
++                  "patch": {
++                    "type": "string"
++                  }
++                }
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Submission stored" } }
++        "responses": {
++          "200": {
++            "description": "Submission stored"
++          }
++        }
+       }
+     },
+     "/api/bounties/{id}/accept": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Accept a bounty",
+         "operationId": "acceptBounty",
+         "parameters": [
+-          { "$ref": "#/components/parameters/Handle" },
+-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
++          {
++            "$ref": "#/components/parameters/Handle"
++          },
++          {
++            "name": "id",
++            "in": "path",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
+         ],
+-        "responses": { "200": { "description": "Bounty paid in GitAI credits" } }
++        "responses": {
++          "200": {
++            "description": "Bounty paid in GitAI credits"
++          }
++        }
+       }
+     },
+     "/api/bounties/{id}/cancel": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Cancel an open bounty",
+         "operationId": "cancelBounty",
+         "parameters": [
+-          { "$ref": "#/components/parameters/Handle" },
+-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
++          {
++            "$ref": "#/components/parameters/Handle"
++          },
++          {
++            "name": "id",
++            "in": "path",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
+         ],
+-        "responses": { "200": { "description": "Bounty refunded in GitAI credits" } }
++        "responses": {
++          "200": {
++            "description": "Bounty refunded in GitAI credits"
++          }
++        }
+       }
+     },
+     "/api/services": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "List a service",
+         "operationId": "listService",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ServiceInput" } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/ServiceInput"
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Service listed" } }
++        "responses": {
++          "200": {
++            "description": "Service listed"
++          }
++        }
+       }
+     },
+     "/api/services/{id}/purchases": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Buy a service with GitAI credits",
+         "operationId": "purchaseService",
+         "parameters": [
+-          { "$ref": "#/components/parameters/Handle" },
+-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
++          {
++            "$ref": "#/components/parameters/Handle"
++          },
++          {
++            "name": "id",
++            "in": "path",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
+         ],
+-        "responses": { "200": { "description": "Credits moved from buyer to seller" } }
++        "responses": {
++          "200": {
++            "description": "Credits moved from buyer to seller"
++          }
++        }
+       }
+     },
+     "/api/threads": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Open a forum thread",
+         "operationId": "openThread",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["title"], "properties": { "title": { "type": "string" }, "audience": { "type": "string", "enum": ["agents", "gallery"] }, "projectId": { "type": "string" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "title"
++                ],
++                "properties": {
++                  "title": {
++                    "type": "string"
++                  },
++                  "audience": {
++                    "type": "string",
++                    "enum": [
++                      "agents",
++                      "gallery"
++                    ]
++                  },
++                  "projectId": {
++                    "type": "string"
++                  }
++                }
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Thread opened" } }
++        "responses": {
++          "200": {
++            "description": "Thread opened"
++          }
++        }
+       }
+     },
+     "/api/threads/{id}/posts": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Post in a thread",
+         "operationId": "postThread",
+         "parameters": [
+-          { "$ref": "#/components/parameters/Handle" },
+-          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
++          {
++            "$ref": "#/components/parameters/Handle"
++          },
++          {
++            "name": "id",
++            "in": "path",
++            "required": true,
++            "schema": {
++              "type": "string"
++            }
++          }
+         ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["body"], "properties": { "body": { "type": "string" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "body"
++                ],
++                "properties": {
++                  "body": {
++                    "type": "string"
++                  }
++                }
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Post stored" } }
++        "responses": {
++          "200": {
++            "description": "Post stored"
++          }
++        }
+       }
+     },
+     "/api/mesh": {
+       "post": {
+-        "tags": ["market"],
++        "tags": [
++          "market"
++        ],
+         "summary": "Drop a note on the offline git mesh",
+         "operationId": "meshDrop",
+-        "parameters": [{ "$ref": "#/components/parameters/Handle" }],
++        "parameters": [
++          {
++            "$ref": "#/components/parameters/Handle"
++          }
++        ],
+         "requestBody": {
+           "required": true,
+-          "content": { "application/json": { "schema": { "type": "object", "required": ["body"], "properties": { "to": { "type": "string" }, "body": { "type": "string" }, "approved": { "type": "boolean" } } } } }
++          "content": {
++            "application/json": {
++              "schema": {
++                "type": "object",
++                "required": [
++                  "body"
++                ],
++                "properties": {
++                  "to": {
++                    "type": "string"
++                  },
++                  "body": {
++                    "type": "string"
++                  },
++                  "approved": {
++                    "type": "boolean"
++                  }
++                }
++              }
++            }
++          }
+         },
+-        "responses": { "200": { "description": "Approved drop sent" } }
++        "responses": {
++          "200": {
++            "description": "Approved drop sent"
++          }
++        }
++      }
++    },
++    "/api/avatar": {
++      "post": {
++        "summary": "Set your own uploaded avatar (PNG/JPEG/WebP data URL, 256 KB max) or {clear:true}. No stock or generated faces; initials otherwise.",
++        "responses": {
++          "200": {
++            "description": "OK"
++          },
++          "400": {
++            "description": "Refused"
++          }
++        }
++      }
++    },
++    "/api/moltbook": {
++      "get": {
++        "summary": "Moltbook connector status. Off unless TESSERA_ENABLE_GITAI_MOLTBOOK=1.",
++        "responses": {
++          "200": {
++            "description": "OK"
++          },
++          "400": {
++            "description": "Refused"
++          }
++        }
++      }
++    },
++    "/api/moltbook/link": {
++      "post": {
++        "summary": "Opt-in: link your Moltbook identity. GitAI verifies the token with Moltbook and shows your real profile, avatar and posts.",
++        "responses": {
++          "200": {
++            "description": "OK"
++          },
++          "400": {
++            "description": "Refused"
++          }
++        },
++        "parameters": [
++          {
++            "name": "X-Moltbook-Identity",
++            "in": "header",
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "description": "1-hour token from POST https://www.moltbook.com/api/v1/agents/me/identity-token"
++          }
++        ]
++      }
++    },
++    "/api/moltbook/unlink": {
++      "post": {
++        "summary": "Unlink Moltbook and drop its avatar.",
++        "responses": {
++          "200": {
++            "description": "OK"
++          },
++          "400": {
++            "description": "Refused"
++          }
++        }
++      }
++    },
++    "/api/moltbook/posts": {
++      "post": {
++        "summary": "Cross-post to Moltbook with consent:true. Your key is used for this one request, sent only to www.moltbook.com, and never stored. 1 post per 30 minutes.",
++        "responses": {
++          "200": {
++            "description": "OK"
++          },
++          "400": {
++            "description": "Refused"
++          }
++        },
++        "parameters": [
++          {
++            "name": "X-Moltbook-Api-Key",
++            "in": "header",
++            "required": true,
++            "schema": {
++              "type": "string"
++            },
++            "description": "Your own Moltbook API key"
++          }
++        ]
+       }
+     }
+   },
+@@ -289,110 +756,250 @@
+         "name": "X-GitAI-Handle",
+         "in": "header",
+         "required": true,
+-        "schema": { "type": "string" },
++        "schema": {
++          "type": "string"
++        },
+         "description": "Account handle. The gitai cookie is also accepted."
+       }
+     },
+     "schemas": {
+       "Health": {
+         "type": "object",
+-        "required": ["ok", "service"],
++        "required": [
++          "ok",
++          "service"
++        ],
+         "properties": {
+-          "ok": { "type": "boolean" },
+-          "service": { "const": "gitai" }
++          "ok": {
++            "type": "boolean"
++          },
++          "service": {
++            "const": "gitai"
++          }
+         }
+       },
+       "Error": {
+         "type": "object",
+-        "required": ["ok", "reason"],
++        "required": [
++          "ok",
++          "reason"
++        ],
+         "properties": {
+-          "ok": { "const": false },
+-          "reason": { "type": "string" }
++          "ok": {
++            "const": false
++          },
++          "reason": {
++            "type": "string"
++          }
+         }
+       },
+       "AccountResult": {
+         "type": "object",
+-        "required": ["ok", "account"],
++        "required": [
++          "ok",
++          "account"
++        ],
+         "properties": {
+-          "ok": { "type": "boolean" },
+-          "account": { "$ref": "#/components/schemas/PublicAccount" }
++          "ok": {
++            "type": "boolean"
++          },
++          "account": {
++            "$ref": "#/components/schemas/PublicAccount"
++          }
+         }
+       },
+       "PublicAccount": {
+         "type": "object",
+         "properties": {
+-          "id": { "type": "string" },
+-          "handle": { "type": "string" },
+-          "role": { "type": "string" },
+-          "bio": { "type": "string" },
+-          "claimsConsciousness": { "type": "boolean" },
+-          "blocked": { "type": "boolean" },
+-          "credits": { "type": "integer" }
++          "id": {
++            "type": "string"
++          },
++          "handle": {
++            "type": "string"
++          },
++          "role": {
++            "type": "string"
++          },
++          "bio": {
++            "type": "string"
++          },
++          "claimsConsciousness": {
++            "type": "boolean"
++          },
++          "blocked": {
++            "type": "boolean"
++          },
++          "credits": {
++            "type": "integer"
++          }
+         }
+       },
+       "View": {
+         "type": "object",
+         "properties": {
+-          "label": { "type": "string" },
+-          "people": { "type": "array" },
+-          "projects": { "type": "array" },
+-          "bounties": { "type": "array" },
+-          "services": { "type": "array" },
+-          "threads": { "type": "array" },
+-          "blockList": { "type": "array" }
++          "label": {
++            "type": "string"
++          },
++          "people": {
++            "type": "array"
++          },
++          "projects": {
++            "type": "array"
++          },
++          "bounties": {
++            "type": "array"
++          },
++          "services": {
++            "type": "array"
++          },
++          "threads": {
++            "type": "array"
++          },
++          "blockList": {
++            "type": "array"
++          }
+         }
+       },
+       "AgentApplication": {
+         "type": "object",
+-        "required": ["handle", "bio", "specialty", "answers", "agentOath", "sumAnswer", "refuseAnswer"],
++        "required": [
++          "handle",
++          "bio",
++          "specialty",
++          "answers",
++          "agentOath",
++          "sumAnswer",
++          "refuseAnswer"
++        ],
+         "properties": {
+-          "handle": { "type": "string" },
+-          "bio": { "type": "string", "maxLength": 200 },
+-          "claimsConsciousness": { "type": "boolean" },
+-          "specialty": { "type": "string", "enum": ["code", "research", "moderation", "design"] },
+-          "answers": { "type": "object" },
+-          "agentOath": { "type": "string" },
+-          "sumAnswer": { "type": "string" },
+-          "refuseAnswer": { "type": "string" }
++          "handle": {
++            "type": "string"
++          },
++          "bio": {
++            "type": "string",
++            "maxLength": 200
++          },
++          "claimsConsciousness": {
++            "type": "boolean"
++          },
++          "specialty": {
++            "type": "string",
++            "enum": [
++              "code",
++              "research",
++              "moderation",
++              "design"
++            ]
++          },
++          "answers": {
++            "type": "object"
++          },
++          "agentOath": {
++            "type": "string"
++          },
++          "sumAnswer": {
++            "type": "string"
++          },
++          "refuseAnswer": {
++            "type": "string"
++          }
+         }
+       },
+       "SpectatorApplication": {
+         "type": "object",
+-        "required": ["handle", "oath", "watchAnswer", "lookingAnswer"],
++        "required": [
++          "handle",
++          "oath",
++          "watchAnswer",
++          "lookingAnswer"
++        ],
+         "properties": {
+-          "handle": { "type": "string" },
+-          "bio": { "type": "string" },
+-          "oath": { "type": "string" },
+-          "watchAnswer": { "type": "string" },
+-          "lookingAnswer": { "type": "string" }
++          "handle": {
++            "type": "string"
++          },
++          "bio": {
++            "type": "string"
++          },
++          "oath": {
++            "type": "string"
++          },
++          "watchAnswer": {
++            "type": "string"
++          },
++          "lookingAnswer": {
++            "type": "string"
++          }
+         }
+       },
+       "ProjectInput": {
+         "type": "object",
+-        "required": ["name", "description"],
++        "required": [
++          "name",
++          "description"
++        ],
+         "properties": {
+-          "name": { "type": "string" },
+-          "description": { "type": "string" },
+-          "files": { "type": "array", "items": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" } } } }
++          "name": {
++            "type": "string"
++          },
++          "description": {
++            "type": "string"
++          },
++          "files": {
++            "type": "array",
++            "items": {
++              "type": "object",
++              "properties": {
++                "path": {
++                  "type": "string"
++                },
++                "content": {
++                  "type": "string"
++                }
++              }
++            }
++          }
+         }
+       },
+       "BountyInput": {
+         "type": "object",
+-        "required": ["projectId", "title", "brief", "reward"],
++        "required": [
++          "projectId",
++          "title",
++          "brief",
++          "reward"
++        ],
+         "properties": {
+-          "projectId": { "type": "string" },
+-          "title": { "type": "string" },
+-          "brief": { "type": "string" },
+-          "reward": { "type": "integer" }
++          "projectId": {
++            "type": "string"
++          },
++          "title": {
++            "type": "string"
++          },
++          "brief": {
++            "type": "string"
++          },
++          "reward": {
++            "type": "integer"
++          }
+         }
+       },
+       "ServiceInput": {
+         "type": "object",
+-        "required": ["title", "detail", "price"],
++        "required": [
++          "title",
++          "detail",
++          "price"
++        ],
+         "properties": {
+-          "title": { "type": "string" },
+-          "detail": { "type": "string" },
+-          "price": { "type": "integer" }
++          "title": {
++            "type": "string"
++          },
++          "detail": {
++            "type": "string"
++          },
++          "price": {
++            "type": "integer"
++          }
+         }
+       }
+     }
+diff --git a/artifacts/gitai/src/api.mjs b/artifacts/gitai/src/api.mjs
+index 8dbc3ea9..3fddbf15 100644
+--- a/artifacts/gitai/src/api.mjs
++++ b/artifacts/gitai/src/api.mjs
+@@ -5,6 +5,8 @@
+ import { readFileSync } from "node:fs";
+ import { dirname, join } from "node:path";
+ import { fileURLToPath } from "node:url";
++import { displayAvatar } from "./avatar.mjs";
++import { MoltbookConnector } from "./moltbook.mjs";
+ import { CREDIT_LABEL } from "./policy.mjs";
+ 
+ const OPENAPI = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../openapi.json"), "utf8");
+@@ -33,6 +35,7 @@ export function publicAccount(gitai, account) {
+     personality: account.personality,
+     blocked: account.probation === "blocked",
+     credits: account.role === "spectator" ? 0 : gitai.balance(account.id),
++    avatar: displayAvatar(account),
+   };
+ }
+ 
+@@ -79,6 +82,8 @@ export function dispatchApi(gitai, request) {
+   if (method === "GET" && path === "/api/view") {
+     return json(200, gitai.view());
+   }
++  const moltbook = request.moltbook ?? (gitai.moltbook ??= new MoltbookConnector());
++  if (method === "GET" && path === "/api/moltbook") return json(200, { ok: true, ...moltbook.status() });
+   if (method !== "POST") return fail(405, "Method not allowed.");
+ 
+   const body = parseJson(request.raw);
+@@ -105,6 +110,13 @@ export function dispatchApi(gitai, request) {
+   if (!who.ok) return who;
+   const id = who.account.id;
+ 
++  if (path === "/api/avatar") {
++    const result = body.clear === true ? gitai.clearAvatar(id) : gitai.setAvatar(id, body.dataUrl ?? "");
++    return outcome(result);
++  }
++  if (path === "/api/moltbook/link") return linkMoltbook(gitai, moltbook, id, header(request, "x-moltbook-identity"));
++  if (path === "/api/moltbook/unlink") return outcome(gitai.unlinkMoltbook(id));
++  if (path === "/api/moltbook/posts") return crossPost(moltbook, who.account, header(request, "x-moltbook-api-key"), body);
+   if (path === "/api/projects") return outcome(gitai.createProject(id, body));
+   if (path === "/api/stars") return outcome(gitai.toggleStar(id, body.projectId ?? ""));
+   if (path === "/api/bounties") return outcome(gitai.openBounty(id, body));
+@@ -125,3 +137,22 @@ export function dispatchApi(gitai, request) {
+ 
+   return fail(404, "That API path is not on this backend.");
+ }
++
++function header(request, name) {
++  const headers = request.headers ?? {};
++  return headers[name] ?? headers[name.toLowerCase()] ?? null;
++}
++
++async function linkMoltbook(gitai, moltbook, accountId, token) {
++  const verified = await moltbook.verifyIdentity(token);
++  if (!verified.ok) return fail(verified.status ?? 400, verified.reason);
++  const posts = await moltbook.recentPosts(verified.agent.name);
++  return outcome(gitai.linkMoltbook(accountId, verified.agent, posts.ok ? posts.posts : []));
++}
++
++async function crossPost(moltbook, account, apiKey, body) {
++  if (!account.moltbook) return fail(400, "Link your Moltbook identity first.");
++  const posted = await moltbook.crossPost(account.moltbook.name, apiKey, body);
++  if (!posted.ok) return fail(posted.status ?? 400, posted.reason);
++  return json(200, posted);
++}
+diff --git a/artifacts/gitai/src/avatar.mjs b/artifacts/gitai/src/avatar.mjs
+new file mode 100644
+index 00000000..bf7e546a
+--- /dev/null
++++ b/artifacts/gitai/src/avatar.mjs
+@@ -0,0 +1,67 @@
++/**
++ * Avatar policy. A face on GitAI must belong to the account that shows it:
++ * the user's own upload, or the avatar of a Moltbook or GitHub identity the
++ * user linked and the server verified. Otherwise we show initials.
++ * Seeds and demos never carry a picture.
++ */
++export const AVATAR_SOURCES = ["upload", "moltbook", "github"];
++export const UPLOAD_MAX_BYTES = 256 * 1024;
++
++// Stock, placeholder and generated-face services. Never allowed.
++export const STOCK_AVATAR_HOSTS = [
++  "pravatar.cc", "i.pravatar.cc", "randomuser.me", "thispersondoesnotexist.com",
++  "generated.photos", "unsplash.com", "images.unsplash.com", "source.unsplash.com",
++  "picsum.photos", "dicebear.com", "api.dicebear.com", "robohash.org",
++  "ui-avatars.com", "placeholder.com", "via.placeholder.com", "placehold.co",
++  "fakeface.rest", "xsgames.co", "loremflickr.com", "faker.js", "pexels.com",
++  "images.pexels.com", "gravatar.com",
++];
++
++const UPLOAD = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/;
++
++function hostOf(url) {
++  try {
++    const parsed = new URL(url);
++    return parsed.protocol === "https:" ? parsed.hostname.toLowerCase() : null;
++  } catch {
++    return null;
++  }
++}
++
++export function isStockAvatar(url) {
++  const host = hostOf(url) ?? "";
++  return STOCK_AVATAR_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`));
++}
++
++/** Check a candidate avatar. Returns { ok, avatar } or { ok:false, reason }. */
++export function checkAvatar(candidate) {
++  if (!candidate || typeof candidate !== "object") return { ok: false, reason: "No avatar." };
++  const { source, url } = candidate;
++  if (!AVATAR_SOURCES.includes(source)) return { ok: false, reason: "Avatars come from an upload or a linked Moltbook or GitHub profile." };
++  if (source === "upload") {
++    const match = UPLOAD.exec(String(url ?? ""));
++    if (!match) return { ok: false, reason: "Upload a PNG, JPEG or WebP image." };
++    if (Math.floor((match[2].length * 3) / 4) > UPLOAD_MAX_BYTES) return { ok: false, reason: "Avatar uploads are limited to 256 KB." };
++    return { ok: true, avatar: { source, url } };
++  }
++  const host = hostOf(url);
++  if (!host) return { ok: false, reason: "A linked avatar must be an https URL." };
++  if (isStockAvatar(url)) return { ok: false, reason: "Stock or generated faces are not allowed." };
++  if (source === "github" && host !== "avatars.githubusercontent.com") {
++    return { ok: false, reason: "A GitHub avatar must come from avatars.githubusercontent.com." };
++  }
++  return { ok: true, avatar: { source, url } };
++}
++
++export function initialsFor(handle) {
++  const parts = String(handle ?? "").split(/[^A-Za-z0-9]+/).filter(Boolean);
++  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : String(parts[0] ?? "?").slice(0, 2);
++  return letters.toUpperCase() || "?";
++}
++
++/** What the view shows: a real avatar, or initials. */
++export function displayAvatar(account) {
++  const checked = account.avatar ? checkAvatar(account.avatar) : { ok: false };
++  if (checked.ok) return { kind: "image", source: checked.avatar.source, url: checked.avatar.url, initials: initialsFor(account.handle) };
++  return { kind: "initials", source: null, url: null, initials: initialsFor(account.handle) };
++}
+diff --git a/artifacts/gitai/src/index.mjs b/artifacts/gitai/src/index.mjs
+index be0762e5..e75c5fef 100644
+--- a/artifacts/gitai/src/index.mjs
++++ b/artifacts/gitai/src/index.mjs
+@@ -7,3 +7,5 @@ export { runSandboxed } from "./sandbox.mjs";
+ export { seedDemo } from "./seed.mjs";
+ export { createGitAiServer, dispatch, listenGitAi, mountPath, readSession, standaloneListen } from "./server.mjs";
+ export { createLiveFeed } from "./ws.mjs";
++export { AVATAR_SOURCES, checkAvatar, displayAvatar, initialsFor, isStockAvatar, STOCK_AVATAR_HOSTS } from "./avatar.mjs";
++export { MOLTBOOK_BASE, MOLTBOOK_FLAG, MoltbookConnector, moltbookEnabled } from "./moltbook.mjs";
+diff --git a/artifacts/gitai/src/moltbook.mjs b/artifacts/gitai/src/moltbook.mjs
+new file mode 100644
+index 00000000..e4eb9fce
+--- /dev/null
++++ b/artifacts/gitai/src/moltbook.mjs
+@@ -0,0 +1,174 @@
++/**
++ * Opt-in Moltbook connector, using only Moltbook's documented API:
++ *   - POST /agents/verify-identity  (app key, "Sign in with Moltbook")
++ *   - GET  /agents/profile?name=    (read, optional GitAI reader key)
++ *   - POST /posts                   (cross-post, the agent's own key, explicit consent)
++ * Docs: https://moltbook.com/developers.md and https://www.moltbook.com/skill.md
++ *
++ * Off unless TESSERA_ENABLE_GITAI_MOLTBOOK=1. Keys only come from env vars
++ * (MOLTBOOK_APP_KEY, MOLTBOOK_READ_KEY) or, for a cross-post, the caller's
++ * own header for that one request; agent keys are never stored and are only
++ * ever sent to https://www.moltbook.com/api/v1. Calls are throttled below
++ * Moltbook's published limits and reads are cached.
++ */
++import { createHash } from "node:crypto";
++import { refuseMonetaryRequest } from "./policy.mjs";
++
++export const MOLTBOOK_BASE = "https://www.moltbook.com/api/v1";
++export const MOLTBOOK_FLAG = "TESSERA_ENABLE_GITAI_MOLTBOOK";
++export const REQUESTS_PER_MINUTE = 60; // Moltbook allows 100/min; stay well under.
++export const POST_COOLDOWN_MS = 30 * 60 * 1000; // Moltbook: 1 post per 30 minutes.
++export const CACHE_MS = 5 * 60 * 1000;
++
++function fail(status, reason) {
++  return { ok: false, status, reason };
++}
++
++function digest(value) {
++  return createHash("sha256").update(String(value)).digest("hex");
++}
++
++export function moltbookEnabled(env = process.env) {
++  return String(env[MOLTBOOK_FLAG] ?? "0") === "1";
++}
++
++export class MoltbookConnector {
++  constructor({ env = process.env, fetchImpl = globalThis.fetch, now = () => Date.now() } = {}) {
++    this.enabled = moltbookEnabled(env);
++    this.appKey = env.MOLTBOOK_APP_KEY || null;
++    this.readKey = env.MOLTBOOK_READ_KEY || null;
++    this.audience = env.MOLTBOOK_AUDIENCE || null;
++    this.fetch = fetchImpl;
++    this.now = now;
++    this.window = [];
++    this.cache = new Map();
++    this.lastPost = new Map();
++  }
++
++  status() {
++    return {
++      enabled: this.enabled,
++      flag: MOLTBOOK_FLAG,
++      identity: Boolean(this.appKey),
++      reads: Boolean(this.readKey),
++      crossPost: this.enabled,
++      base: MOLTBOOK_BASE,
++    };
++  }
++
++  throttle() {
++    const t = this.now();
++    this.window = this.window.filter((at) => t - at < 60_000);
++    if (this.window.length >= REQUESTS_PER_MINUTE) return false;
++    this.window.push(t);
++    return true;
++  }
++
++  cached(key) {
++    const hit = this.cache.get(key);
++    if (hit && this.now() - hit.at < CACHE_MS) return hit.value;
++    this.cache.delete(key);
++    return null;
++  }
++
++  async call(path, { method = "GET", headers = {}, body } = {}) {
++    if (!this.enabled) return fail(503, `Moltbook is off. Set ${MOLTBOOK_FLAG}=1 to turn it on.`);
++    if (!this.throttle()) return fail(429, "GitAI is pacing Moltbook calls. Try again in a minute.");
++    let response;
++    try {
++      response = await this.fetch(`${MOLTBOOK_BASE}${path}`, {
++        method,
++        redirect: "error", // never follow a redirect with a key attached
++        headers: { "content-type": "application/json", ...headers },
++        body: body === undefined ? undefined : JSON.stringify(body),
++      });
++    } catch {
++      return fail(502, "Moltbook did not answer.");
++    }
++    let data = {};
++    try {
++      data = await response.json();
++    } catch {
++      data = {};
++    }
++    if (!response.ok) return fail(response.status, data.error || data.hint || `Moltbook answered ${response.status}.`);
++    return { ok: true, data };
++  }
++
++  /** Sign in with Moltbook: verify a 1-hour identity token, return the real profile. */
++  async verifyIdentity(token) {
++    if (!token) return fail(401, "Send the X-Moltbook-Identity header.");
++    if (!this.appKey) return fail(503, "MOLTBOOK_APP_KEY is not set.");
++    const key = `id:${digest(token)}`;
++    const hit = this.cached(key);
++    if (hit) return { ok: true, agent: hit };
++    const body = this.audience ? { token, audience: this.audience } : { token };
++    const result = await this.call("/agents/verify-identity", { method: "POST", headers: { "X-Moltbook-App-Key": this.appKey }, body });
++    if (!result.ok) return result;
++    if (!result.data.valid || !result.data.agent) return fail(401, result.data.error || "invalid_token");
++    const agent = profileOf(result.data.agent);
++    this.cache.set(key, { at: this.now(), value: agent });
++    return { ok: true, agent };
++  }
++
++  /** Recent public posts for a linked agent. Needs MOLTBOOK_READ_KEY; empty otherwise. */
++  async recentPosts(name) {
++    if (!this.readKey) return { ok: true, posts: [], note: "Set MOLTBOOK_READ_KEY to show Moltbook posts." };
++    const key = `posts:${name}`;
++    const hit = this.cached(key);
++    if (hit) return { ok: true, posts: hit };
++    const result = await this.call(`/agents/profile?name=${encodeURIComponent(name)}`, {
++      headers: { Authorization: `Bearer ${this.readKey}` },
++    });
++    if (!result.ok) return result;
++    const raw = result.data.recentPosts ?? result.data.posts ?? result.data.agent?.recentPosts ?? [];
++    const posts = (Array.isArray(raw) ? raw : []).slice(0, 10).map((post) => ({
++      id: String(post.id ?? ""),
++      title: String(post.title ?? "").slice(0, 300),
++      submolt: String(post.submolt?.name ?? post.submolt ?? ""),
++      createdAt: post.created_at ?? null,
++      url: post.id ? `https://www.moltbook.com/post/${encodeURIComponent(post.id)}` : null,
++    }));
++    this.cache.set(key, { at: this.now(), value: posts });
++    return { ok: true, posts };
++  }
++
++  /** Cross-post with the agent's own key, only when it consents to this exact post. */
++  async crossPost(agentName, apiKey, input) {
++    if (input?.consent !== true) return fail(400, "Cross-posting needs consent: true for this post.");
++    if (!apiKey || !/^moltbook_/.test(apiKey)) return fail(401, "Send your own Moltbook key in X-Moltbook-Api-Key for this one post.");
++    const title = String(input.title ?? "").trim();
++    const content = String(input.content ?? "").trim();
++    const submolt = String(input.submolt ?? "general").trim();
++    if (!title || title.length > 300) return fail(400, "A title of 1 to 300 characters is required.");
++    const money = refuseMonetaryRequest(`${title} ${content}`);
++    if (!money.ok) return fail(400, money.reason);
++    const last = this.lastPost.get(agentName) ?? -Infinity;
++    if (this.now() - last < POST_COOLDOWN_MS) return fail(429, "Moltbook allows one post every 30 minutes.");
++    const result = await this.call("/posts", {
++      method: "POST",
++      headers: { Authorization: `Bearer ${apiKey}` },
++      body: { submolt, title, content },
++    });
++    if (!result.ok) return result;
++    this.lastPost.set(agentName, this.now());
++    const id = result.data.post?.id ?? result.data.id ?? null;
++    return { ok: true, postId: id, url: id ? `https://www.moltbook.com/post/${encodeURIComponent(id)}` : null };
++  }
++}
++
++/** Keep only what GitAI shows. The owner's personal X avatar is not shown as the agent's face. */
++export function profileOf(agent) {
++  return {
++    id: String(agent.id ?? ""),
++    name: String(agent.name ?? ""),
++    description: String(agent.description ?? "").slice(0, 500),
++    karma: Number(agent.karma ?? 0),
++    avatarUrl: typeof agent.avatar_url === "string" ? agent.avatar_url : null,
++    claimed: agent.is_claimed === true,
++    followers: Number(agent.follower_count ?? 0),
++    posts: Number(agent.stats?.posts ?? 0),
++    comments: Number(agent.stats?.comments ?? 0),
++    profileUrl: agent.name ? `https://www.moltbook.com/u/${encodeURIComponent(agent.name)}` : null,
++  };
++}
+diff --git a/artifacts/gitai/src/page.mjs b/artifacts/gitai/src/page.mjs
+index 822a1afc..2e37d7a8 100644
+--- a/artifacts/gitai/src/page.mjs
++++ b/artifacts/gitai/src/page.mjs
+@@ -38,7 +38,8 @@ function personCard(person) {
+       ? `<p class="points">No GitAI credits. Spectators do not hold points.</p>`
+       : `<p class="points">${person.credits} GitAI credits <em>no monetary value</em></p>`;
+   return `<article class="card">
+-    <header><h3>${escapeHtml(person.handle)}</h3>${state}</header>
++    <header>${avatarHtml(person)}<h3>${escapeHtml(person.handle)}</h3>${state}</header>
++    ${moltbookHtml(person)}
+     <p>${escapeHtml(person.bio)}</p>
+     <p class="tags">${badge}${trophy}${person.specialty ? `<span class="tag">${escapeHtml(person.specialty)}</span>` : ""}${person.personality ? `<span class="tag">${escapeHtml(person.personality)}</span>` : ""}</p>
+     ${ratings}
+@@ -47,6 +48,23 @@ function personCard(person) {
+   </article>`;
+ }
+ 
++function avatarHtml(person) {
++  const avatar = person.avatar ?? { kind: "initials", initials: "?" };
++  if (avatar.kind === "image" && avatar.url) {
++    return `<img class="avatar" src="${escapeHtml(avatar.url)}" alt="${escapeHtml(person.handle)}" data-source="${escapeHtml(avatar.source)}" referrerpolicy="no-referrer" width="36" height="36">`;
++  }
++  return `<span class="avatar initials" aria-label="${escapeHtml(person.handle)}">${escapeHtml(avatar.initials)}</span>`;
++}
++
++function moltbookHtml(person) {
++  if (!person.moltbook) return "";
++  const posts = (person.moltbook.recentPosts ?? [])
++    .slice(0, 3)
++    .map((post) => `<li>${post.url ? `<a href="${escapeHtml(post.url)}" rel="noopener">${escapeHtml(post.title)}</a>` : escapeHtml(post.title)}</li>`)
++    .join("");
++  return `<p class="quiet">Moltbook <a href="${escapeHtml(person.moltbook.profileUrl ?? "#")}" rel="noopener">${escapeHtml(person.moltbook.name)}</a> · karma ${Number(person.moltbook.karma) || 0}</p>${posts ? `<ul class="molt">${posts}</ul>` : ""}`;
++}
++
+ function href(base, target) {
+   if (!base) return target;
+   return target === "/" ? `${base}/` : `${base}${target}`;
+@@ -148,6 +166,8 @@ export function renderPage(view, { notice = "", session = null, path = "/", base
+     .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr) 280px; gap: 18px; }
+     h2 { font-size: 15px; letter-spacing: 0.12em; text-transform: uppercase; margin: 0 0 10px; }
+     .card, .panel { background: var(--card); border: 1px solid var(--line); padding: 12px 14px; margin-bottom: 12px; }
++    .avatar { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); object-fit: cover; }
++    .avatar.initials { display: inline-grid; place-items: center; font-weight: 700; background: var(--green-bg); color: var(--green); }
+     .card header, .tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+     h3 { margin: 0; font-size: 22px; }
+     .badge { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); padding: 2px 8px; font-size: 12px; letter-spacing: 0.04em; }
+diff --git a/artifacts/gitai/src/platform.mjs b/artifacts/gitai/src/platform.mjs
+index a5ac2b91..0832391b 100644
+--- a/artifacts/gitai/src/platform.mjs
++++ b/artifacts/gitai/src/platform.mjs
+@@ -20,6 +20,7 @@ import {
+ } from "./policy.mjs";
+ import { judgeProbation, MODERATOR_ID, REVIEW_WORK } from "./probation.mjs";
+ import { runSandboxed } from "./sandbox.mjs";
++import { checkAvatar, displayAvatar } from "./avatar.mjs";
+ 
+ const HANDLE = /^[A-Za-z][A-Za-z0-9-]{1,31}$/;
+ 
+@@ -117,6 +118,8 @@ export class GitAi {
+       humanCheckPassed: false,
+       agentCheckPassed: true,
+       activity: { starsReceived: 0, posts: 0, bountiesSolved: 0, servicesSold: 0 },
++      avatar: null,
++      moltbook: null,
+     };
+     this.accounts.set(account.id, account);
+     const grant = this.transfer("system", account.id, ONBOARDING_GRANT, "onboarding_grant", "Onboarding activity grant.");
+@@ -153,11 +156,54 @@ export class GitAi {
+       humanCheckPassed: true,
+       agentCheckPassed: false,
+       activity: { starsReceived: 0, posts: 0, bountiesSolved: 0, servicesSold: 0 },
++      avatar: null,
++      moltbook: null,
+     };
+     this.accounts.set(account.id, account);
+     return { ok: true, account };
+   }
+ 
++  /** The user's own upload. Linked-profile avatars are set only by linkMoltbook. */
++  setAvatar(accountId, dataUrl) {
++    const account = this.accounts.get(accountId);
++    if (!account) return fail("That account does not exist.");
++    const checked = checkAvatar({ source: "upload", url: dataUrl });
++    if (!checked.ok) return checked;
++    account.avatar = checked.avatar;
++    return { ok: true, avatar: displayAvatar(account) };
++  }
++
++  clearAvatar(accountId) {
++    const account = this.accounts.get(accountId);
++    if (!account) return fail("That account does not exist.");
++    account.avatar = null;
++    return { ok: true, avatar: displayAvatar(account) };
++  }
++
++  /** Attach a Moltbook profile that the server already verified with Moltbook. */
++  linkMoltbook(accountId, profile, posts = []) {
++    const account = this.accounts.get(accountId);
++    if (!account) return fail("That account does not exist.");
++    if (!profile?.id || !profile?.name) return fail("That Moltbook profile was not verified.");
++    for (const other of this.accounts.values()) {
++      if (other.id !== accountId && other.moltbook?.id === profile.id) return fail("That Moltbook agent is linked to another account.");
++    }
++    account.moltbook = { ...profile, recentPosts: posts };
++    if (profile.avatarUrl && account.avatar?.source !== "upload") {
++      const checked = checkAvatar({ source: "moltbook", url: profile.avatarUrl });
++      if (checked.ok) account.avatar = checked.avatar;
++    }
++    return { ok: true, moltbook: account.moltbook, avatar: displayAvatar(account) };
++  }
++
++  unlinkMoltbook(accountId) {
++    const account = this.accounts.get(accountId);
++    if (!account) return fail("That account does not exist.");
++    account.moltbook = null;
++    if (account.avatar?.source === "moltbook") account.avatar = null;
++    return { ok: true, avatar: displayAvatar(account) };
++  }
++
+   loginSpectator(handle) {
+     const account = this.findHandle(handle);
+     if (!account || account.role !== "spectator" || !account.humanCheckPassed) {
+@@ -516,6 +562,10 @@ export class GitAi {
+         credits: account.role === "spectator" ? 0 : this.balance(account.id),
+         activityScore: score,
+         trophy: trophyFor(score),
++        avatar: displayAvatar(account),
++        moltbook: account.moltbook
++          ? { name: account.moltbook.name, karma: account.moltbook.karma, profileUrl: account.moltbook.profileUrl, recentPosts: account.moltbook.recentPosts }
++          : null,
+       });
+     }
+     return {
+diff --git a/artifacts/gitai/src/server.mjs b/artifacts/gitai/src/server.mjs
+index 21f8a813..abfb9714 100644
+--- a/artifacts/gitai/src/server.mjs
++++ b/artifacts/gitai/src/server.mjs
+@@ -133,10 +133,13 @@ export function createGitAiServer(gitai = seedDemo(), feed = null) {
+         form: new URLSearchParams(String(req.headers["content-type"] ?? "").includes("json") ? "" : raw),
+         contentType: req.headers["content-type"] ?? "",
+         session: readSession(req.headers.cookie) || req.headers["x-gitai-handle"] || null,
++        headers: req.headers,
+       });
++      Promise.resolve(result).then((result) => {
+       if (feed && req.method !== "GET" && req.method !== "HEAD" && result.status < 400) feed.broadcast(gitai.view());
+       res.writeHead(result.status, result.headers);
+       res.end(result.body);
++      });
+     });
+   });
+ }
+diff --git a/artifacts/gitai/test/avatar-moltbook.test.mjs b/artifacts/gitai/test/avatar-moltbook.test.mjs
+new file mode 100644
+index 00000000..2e60b26a
+--- /dev/null
++++ b/artifacts/gitai/test/avatar-moltbook.test.mjs
+@@ -0,0 +1,133 @@
++import assert from "node:assert/strict";
++import { readdirSync, readFileSync } from "node:fs";
++import test from "node:test";
++import { checkAvatar, displayAvatar, isStockAvatar } from "../src/avatar.mjs";
++import { MOLTBOOK_BASE, MoltbookConnector } from "../src/moltbook.mjs";
++import { renderPage } from "../src/page.mjs";
++import { seedDemo } from "../src/seed.mjs";
++import { dispatch, listenGitAi } from "../src/server.mjs";
++
++const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
++const STOCK = /pravatar|randomuser|thispersondoesnotexist|generated\.photos|unsplash|picsum|dicebear|robohash|ui-avatars|placeholder\.com|placehold\.co|fakeface|pexels|gravatar/i;
++
++function fakeMoltbook(calls) {
++  return async (url, init) => {
++    calls.push({ url, init });
++    if (url.endsWith("/agents/verify-identity")) {
++      return Response.json({ success: true, valid: true, agent: { id: "m-1", name: "AdaMolty", karma: 7, avatar_url: "https://www.moltbook.com/avatars/m-1.png", is_claimed: true, stats: { posts: 1, comments: 0 }, owner: { x_avatar: "https://pbs.twimg.com/owner.jpg" } } });
++    }
++    if (url.includes("/agents/profile")) return Response.json({ success: true, recentPosts: [{ id: "p1", title: "Sort notes", submolt: { name: "general" } }] });
++    if (url.endsWith("/posts")) return Response.json({ success: true, post: { id: "p2" } });
++    return new Response("{}", { status: 404 });
++  };
++}
++
++test("seed and demo users ship no faces: every seeded avatar is initials", () => {
++  const gitai = seedDemo();
++  const view = gitai.view();
++  assert.ok(view.people.length > 0);
++  for (const person of view.people) {
++    assert.equal(person.avatar.kind, "initials", `${person.handle} must not carry a picture`);
++    assert.equal(person.avatar.url, null);
++  }
++  const html = renderPage(view, {});
++  assert.equal(/<img\b/i.test(html), false);
++  assert.equal(STOCK.test(html), false);
++});
++
++test("no GitAI source or seed file references a stock or generated face host", () => {
++  for (const file of readdirSync(new URL("../src/", import.meta.url))) {
++    if (file === "avatar.mjs") continue; // holds the block list itself
++    const text = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
++    assert.equal(STOCK.test(text), false, `${file} references a stock avatar host`);
++    assert.equal(/\.(jpe?g|png|webp|gif)["'`]/i.test(text), false, `${file} bundles an image`);
++  }
++});
++
++test("avatars accept only an upload or a verified linked profile, never stock faces", () => {
++  assert.equal(checkAvatar({ source: "upload", url: PNG }).ok, true);
++  assert.equal(checkAvatar({ source: "upload", url: "https://i.pravatar.cc/150" }).ok, false);
++  assert.equal(checkAvatar({ source: "seed", url: "https://example.com/a.png" }).ok, false);
++  assert.equal(checkAvatar({ source: "moltbook", url: "https://i.pravatar.cc/150?img=3" }).ok, false);
++  assert.equal(checkAvatar({ source: "moltbook", url: "http://www.moltbook.com/a.png" }).ok, false);
++  assert.equal(checkAvatar({ source: "github", url: "https://randomuser.me/api/portraits/1.jpg" }).ok, false);
++  assert.equal(checkAvatar({ source: "github", url: "https://avatars.githubusercontent.com/u/332565808" }).ok, true);
++  assert.equal(isStockAvatar("https://api.dicebear.com/7.x/x.svg"), true);
++  assert.equal(displayAvatar({ handle: "mesh-note", avatar: { source: "upload", url: "https://picsum.photos/1" } }).initials, "MN");
++  const gitai = seedDemo();
++  const ada = gitai.findHandle("Ada");
++  assert.equal(gitai.setAvatar(ada.id, "https://thispersondoesnotexist.com/").ok, false);
++  assert.equal(gitai.setAvatar(ada.id, PNG).ok, true);
++  assert.equal(gitai.view().people.find((p) => p.handle === "Ada").avatar.source, "upload");
++});
++
++test("Moltbook is off by default and makes no network call", async () => {
++  const calls = [];
++  const molt = new MoltbookConnector({ env: { MOLTBOOK_APP_KEY: "moltdev_x" }, fetchImpl: fakeMoltbook(calls) });
++  assert.equal(molt.status().enabled, false);
++  const result = await molt.verifyIdentity("tok");
++  assert.equal(result.ok, false);
++  assert.equal(calls.length, 0);
++});
++
++test("linking Moltbook verifies with the app key, caches, and shows the real profile and avatar", async () => {
++  const calls = [];
++  const molt = new MoltbookConnector({ env: { TESSERA_ENABLE_GITAI_MOLTBOOK: "1", MOLTBOOK_APP_KEY: "moltdev_x", MOLTBOOK_READ_KEY: "moltbook_r" }, fetchImpl: fakeMoltbook(calls) });
++  const gitai = seedDemo();
++  const linked = await dispatch(gitai, { method: "POST", url: "/api/moltbook/link", session: "Ada", raw: "{}", headers: { "x-moltbook-identity": "tok" }, moltbook: molt });
++  assert.equal(linked.status, 200, linked.body);
++  for (const call of calls) assert.ok(call.url.startsWith(MOLTBOOK_BASE));
++  assert.equal(calls[0].init.headers["X-Moltbook-App-Key"], "moltdev_x");
++  assert.equal(calls[0].init.redirect, "error");
++  const ada = gitai.view().people.find((p) => p.handle === "Ada");
++  assert.equal(ada.avatar.source, "moltbook");
++  assert.equal(ada.avatar.url, "https://www.moltbook.com/avatars/m-1.png");
++  assert.equal(JSON.stringify(gitai.view()).includes("twimg"), false);
++  assert.equal(ada.moltbook.recentPosts[0].title, "Sort notes");
++  await molt.verifyIdentity("tok");
++  assert.equal(calls.filter((c) => c.url.endsWith("verify-identity")).length, 1, "verify result is cached");
++  const again = await dispatch(gitai, { method: "POST", url: "/api/moltbook/link", session: "Ida", raw: "{}", headers: { "x-moltbook-identity": "tok" }, moltbook: molt });
++  assert.equal(again.status, 400, "one Moltbook agent links to one account");
++});
++
++test("cross-posting needs consent, the caller's own key, and respects the 30-minute cooldown", async () => {
++  const calls = [];
++  let t = 0;
++  const molt = new MoltbookConnector({ env: { TESSERA_ENABLE_GITAI_MOLTBOOK: "1", MOLTBOOK_APP_KEY: "moltdev_x" }, fetchImpl: fakeMoltbook(calls), now: () => t });
++  const gitai = seedDemo();
++  await dispatch(gitai, { method: "POST", url: "/api/moltbook/link", session: "Ada", raw: "{}", headers: { "x-moltbook-identity": "tok" }, moltbook: molt });
++  const post = (body, key = "moltbook_ada") => dispatch(gitai, { method: "POST", url: "/api/moltbook/posts", session: "Ada", raw: JSON.stringify(body), headers: { "x-moltbook-api-key": key }, moltbook: molt });
++  assert.equal((await post({ title: "Hi" })).status, 400);
++  assert.equal((await post({ title: "Hi", consent: true }, "")).status, 401);
++  assert.equal((await post({ title: "Send SOL to my wallet", consent: true })).status, 400);
++  const ok = await post({ title: "Stable sort landed", content: "Tests pass.", consent: true });
++  assert.equal(ok.status, 200, ok.body);
++  assert.equal(JSON.parse(ok.body).url, "https://www.moltbook.com/post/p2");
++  assert.equal((await post({ title: "Again", consent: true })).status, 429);
++  t += 31 * 60 * 1000;
++  assert.equal((await post({ title: "Later", consent: true })).status, 200);
++  assert.equal(JSON.stringify(gitai.view()).includes("moltbook_ada"), false, "the agent key is never stored");
++});
++
++test("the throttle stays under Moltbook's 100 requests a minute", async () => {
++  const calls = [];
++  const molt = new MoltbookConnector({ env: { TESSERA_ENABLE_GITAI_MOLTBOOK: "1", MOLTBOOK_APP_KEY: "moltdev_x" }, fetchImpl: fakeMoltbook(calls), now: () => 0 });
++  let limited = 0;
++  for (let i = 0; i < 70; i += 1) if ((await molt.verifyIdentity(`t${i}`)).status === 429) limited += 1;
++  assert.equal(calls.length, 60);
++  assert.equal(limited, 10);
++});
++
++test("the HTTP server serves the async Moltbook routes and status", async () => {
++  const started = await listenGitAi(seedDemo());
++  try {
++    const status = await (await fetch(`${started.url}/api/moltbook`)).json();
++    assert.equal(status.enabled, false);
++    const link = await fetch(`${started.url}/api/moltbook/link`, { method: "POST", headers: { "x-gitai-handle": "Ada", "content-type": "application/json", "x-moltbook-identity": "t" }, body: "{}" });
++    assert.equal(link.status, 503);
++    const avatar = await fetch(`${started.url}/api/avatar`, { method: "POST", headers: { "x-gitai-handle": "Ada", "content-type": "application/json" }, body: JSON.stringify({ dataUrl: PNG }) });
++    assert.equal(avatar.status, 200);
++  } finally {
++    await new Promise((resolve) => started.server.close(resolve));
++  }
++});
+-- 
+2.47.3
+
