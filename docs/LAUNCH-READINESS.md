@@ -1,4 +1,4 @@
-# GitAI launch preparation — 2026-10-23
+# GitAI launch preparation
 
 ## Existing deployment, not this release
 
@@ -27,10 +27,19 @@ this launch-preparation pass. The existing public deployment was left unchanged.
   cover content/history/proposals, wrong repository IDs, corruption, unexpected
   fields, malformed pack data, symlinks, traversal and existing-destination refusal.
 
-These are recovery building blocks and safety gates, **not a hosted durable Git
-store**. No remote backup has been uploaded, independently retained or restored.
-The production gate must remain closed until an actual adapter is implemented,
-metadata/object consistency is tested, and independent backup recovery succeeds.
+An App Storage snapshot writer now stores immutable, hash-named private objects
+under the configured private prefix. A disposable synthetic Git smoke test
+uploaded, retried, downloaded and restored a small repository on a separate local
+node, verified anonymous access was denied, and deleted the exact test object.
+The test emitted nonfatal `MaxListenersExceededWarning` messages from the request
+stream dependency; they were not suppressed and need investigation before
+long-lived jobs use the writer.
+
+This is a tested, single-provider snapshot archive—not the active hosted Git
+backend, a second provider, retention policy or independent backup. The writer is
+not wired into application mutations or Git reads. Production remains fail-closed
+until Git/database consistency is implemented and tested, an independent backup
+is provisioned and restore-verified, and the stream warning is resolved.
 
 ## Private operator recovery
 
@@ -61,16 +70,12 @@ after a hard kill must be investigated before manual removal.
 
 ## Remaining decisions and blockers
 
-1. **Durable primary plus independent backup:** the owner selected App Storage
-   primary plus a private Cloudflare R2 backup. App Storage provisioning succeeded
-   and configured the three standard storage keys in this Project. No repository
-   objects were uploaded, public storage routes added, or production adapter
-   enabled. Cloudflare's API integration is available but not yet connected.
-   Finish app-specific private prefixes/buckets, encryption, least-privilege IAM,
-   quotas, retention and recovery ownership before remote tests. App Storage has
-   no documented object versioning, lifecycle rules or retention policies; it
-   alone is not an independent backup. Provisioning does not establish durability
-   or permit opening the production gate.
+1. **Independent backup:** the owner selected App Storage primary plus a private
+   Cloudflare R2 backup. App Storage provisioning and the synthetic remote
+   round-trip passed, but no GitAI repository was uploaded. Cloudflare is not
+   connected, so no R2 writer, separate bucket, retention or restore test exists.
+   The App Storage service has no documented object versioning, lifecycle rules
+   or retention policies. Do not enable the production gate on one copy.
 2. **Owner identity:** `GITAI_OWNER_SUBJECT` is absent in production configuration.
    Confirm the intended authenticated production operator through the secure
    configuration flow. Development and production Clerk accounts are separate;
@@ -86,7 +91,11 @@ after a hard kill must be investigated before manual removal.
    proxy was not replaced with an unreviewed homegrown auth proxy. Current canonical upstream
    identity/security gates must be preserved when reconciling the divergent local
    source. Public redistribution licensing is not fully established.
-5. **Privacy and operations:** finish retention/deletion, moderation staffing,
+5. **Archive client:** the synthetic App Storage check emitted nonfatal Node
+   `MaxListenersExceededWarning` messages in the Google request-stream dependency.
+   The cause was not isolated or hidden; investigate and repeat the bounded test
+   before using this client in a persistent job.
+6. **Privacy and operations:** finish retention/deletion, moderation staffing,
    abuse response and distributed quota decisions. Existing minimization and
    tenant checks are not legal/privacy certification. Production DB separation,
    storage recovery and authenticated smoke tests are not yet verified.
@@ -97,14 +106,15 @@ https://docs.replit.com/features/auth-and-identity/clerk-auth.
 
 ## Rollout and rollback
 
-Current local receipts: full workspace typecheck, root unit tests (six marketplace
-plus four recovery/readiness tests), disposable DB integration (two groups),
+Current local receipts: full workspace typecheck/build, root unit tests (six marketplace
+plus seven recovery/archive/readiness tests), disposable DB integration (two groups),
 production-refusal HTTP integration, normal and kernel-network-denied offline
 exchange tests, API bundle and root-path frontend bundle all passed. Signed-out
 browser checks passed at 390/768/1440 px; the 390px app screenshot was inspected.
 The frontend build retains source-map and large-chunk warnings. Dependency,
-static-security and privacy scanners reported zero findings. These are local
-receipts, not authenticated browser, durable remote storage or deployment proof.
+static-security and privacy scanners reported zero findings. A bounded synthetic
+App Storage upload/restore passed, with the listener warning above. These are local
+receipts, not authenticated browser acceptance, independent backup or deployment proof.
 
 Do not publish this preparatory source while readiness is intentionally failing.
 The existing published build remains unchanged. Keep runner execution, collectors,

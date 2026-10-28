@@ -14,14 +14,15 @@ multi-milestone completion, stale delivery decisions, disputes/resolutions and
 review evidence/duplicate restrictions. The test drops its schema afterward.
 `pnpm run typecheck` passed after contract regeneration.
 
-An authenticated synthetic buyer/seller browser journey exercised proposal,
+An earlier authenticated synthetic buyer/seller browser report exercised proposal,
 consent, executable 503 refusal, manual rejection/resubmission, two milestone
 acceptances, both reviews, dispute/evidence and mutual resolution with reload
 persistence. Anonymous and outsider views excluded private work data. Synthetic
 fixtures were removed by their exact IDs. See
 `gitai-marketplace-authenticated-regression.md` for replay details and responsive
-checks. Subcontract and withdrawal browser forms were not exercised in this
-pass; their state/authorization rules have disposable DB coverage.
+checks. It predates this source head and is **historical, not current acceptance**.
+Subcontract and withdrawal browser forms were not exercised in that pass; their
+state/authorization rules have disposable DB coverage.
 
 These results do not remove the production blockers below. Identity assertions
 remain self-reported, executable work remains blocked without an isolated
@@ -90,9 +91,10 @@ while anonymous and unrelated exports do not.
   Marketplace-attention tests: consent and expiry, buyer/seller/nonparticipant
   visibility for every category, upcoming versus overdue seller deadlines,
   delivery decisions and redelivery, and disputed work/resolution responses.
-  It also runs two private snapshot/restore tests and two production-readiness
-  tests through `test:launch`. A separate real HTTP integration test verifies
-  production health and mutations return 503 while durable storage is absent.
+  It also runs two local Git snapshot/restore tests, three private archive
+  verification tests and two production-readiness tests through `test:launch`.
+  A separate real HTTP integration test verifies production health and mutations
+  return 503 while the durable Git backend and independent backup are absent.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
   - Public community/repository/marketplace/people/fees/offline/settings routes
     render; no horizontal page overflow at those sizes.
@@ -110,6 +112,19 @@ while anonymous and unrelated exports do not.
   workflow restart. The browser suite is signed-out only; no authenticated
   browser mutation was tested. No deployment, external Git push, outreach or
   financial operation was performed.
+- A synthetic App Storage smoke check uploaded a 747-byte isolated Git snapshot,
+  verified an idempotent retry and generation-bound read, restored its main and
+  orphan proposal commit into a second private node, and confirmed anonymous
+  storage access was denied. The exact synthetic object was removed. No user
+  repository was uploaded. This verifies one storage provider only, not an
+  independent R2 backup or the active Git repository backend.
+- A dependency upgrade moved workspace schemas to Zod 4.6.7, compatible generated
+  schemas to Zod 4, Express to 5.3.0, body-parser to 2.4.0, qs to 6.16.1, and
+  fast-uri to 3.1.9. Current pnpm, static and privacy scans report zero findings.
+  `@google-cloud/storage` 8.4.0 is Apache-2.0. The App Storage smoke emitted
+  nonfatal Node `MaxListenersExceededWarning` messages through the Google
+  request-stream dependency; they were not suppressed and need investigation
+  before that writer is enabled for long-lived production jobs.
 
 ## Reproduce
 
@@ -122,6 +137,8 @@ node --test tools/gitai-offline.test.mjs
 python3 tools/test-network-denied.py
 pnpm --filter @workspace/scripts exec node src/gitai-browser-test.mjs
 pnpm --filter @workspace/api-server run build
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tests/private-repository-archive.test.ts
 PORT=22891 BASE_PATH=/ pnpm --filter @workspace/gitai run build
 pnpm audit
 ```
@@ -174,18 +191,19 @@ New auth packages verified on npm as real packages:
 `@clerk/express 2.1.80`, `@clerk/shared 4.40.0`,
 `http-proxy-middleware 4.2.0`, `@clerk/react 6.17.8`,
 `@clerk/themes 2.4.57` (MIT).
-`zod 4.3.6` and React/ReactDOM `19.1.4` are MIT.
+`zod 4.6.7` and React/ReactDOM `19.1.4` are MIT.
 `playwright 1.64.1` is Apache-2.0 (development tests only).
 Auth keys were provisioned through the managed setup and referenced at runtime;
 no key values were inspected, hardcoded, returned or put in Git/model prompts.
 
-Current 2026-10-23 audit: **0 critical, 0 high, 0 moderate, 0 low**.
+Latest pnpm and Replit dependency audits: **0 critical, 0 high, 0 moderate,
+0 low**.
 Vite is now 7.3.7 and markdown-it is 14.3.3, both selected from patched releases
 and verified as MIT before installation. The formerly remaining advisory
 `GHSA-vfj7-8cjw-p6xm` for `braces 3.0.3` was withdrawn by GitHub at
 2026-10-23T12:53:02Z. The package version is unchanged, and the issue was not
-suppressed or claimed patched. Both pnpm audit and the dependency scanner now
-report zero advisories. Earlier lockfile/targeted fixes for proxy-addr, source-map-js, fast-uri,
+suppressed or claimed patched. Both the current pnpm audit and Replit's dependency
+scanner report zero advisories. Earlier lockfile/targeted fixes for proxy-addr, source-map-js, fast-uri,
 brace-expansion and selector-parser remain present. Recheck dependency status
 for the exact future release head.
 
@@ -199,13 +217,14 @@ operations still require review; withdrawal is not a promise of forensic erasure
 ## Release decision and rollback
 
 **NO-GO for production or publication from the current task branch.** The
-absent repository license/three development
-plugin license declarations, non-durable Git storage, authenticated browser
-acceptance, owner designation and privacy/moderation review remain. The local
-branch is 18 commits behind canonical `main`, and a merge-tree review reports
-20 conflicts; a direct PR would delete the upstream identity file and required
-`code-gate` workflow/scripts. No PR was opened. The recent cursor-paged/resumable
-personal-export path is not covered by this verification, and saved-export
+absent repository license/three development plugin license declarations,
+non-durable Git storage, authenticated browser acceptance, owner designation and
+privacy/moderation review remain. The branch comparison and merge-tree review
+were historical, not rechecked against a current upstream ref: they found an
+18-commit divergence and 20 conflicts, with a direct PR removing upstream
+identity and `code-gate` safeguards. No PR was opened. Re-pin refs and review the
+current tree before publication. The recent cursor-paged/resumable personal-export
+path is not covered by this verification, and saved-export
 cleanup at sign-out/expiry was not exercised. Runner/payments/admission cannot
 be enabled merely by setting a success flag.
 
