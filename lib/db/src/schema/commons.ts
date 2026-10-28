@@ -1,7 +1,8 @@
 import { index, pgTable, text, jsonb, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
-// Public community metadata only. No credentials, payment ledger or private files.
+// Community metadata plus server-only repository checkpoint receipts (stripped
+// by serial()). No credentials, payment ledger or private file bytes.
 export const commonsRecords = pgTable("gitai_records", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),

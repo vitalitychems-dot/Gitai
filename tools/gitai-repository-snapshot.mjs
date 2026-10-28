@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Operator-only recovery primitive, not a hosted storage backend or a public API.
+// Bounded recovery codec; importing it does not execute the operator CLI.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, writeFileSync, realpathSync, mkdtempSync, renameSync, rmSync,
@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const OID = /^[a-f0-9]{40}$/;
+const PROPOSAL_REF = /^refs\/heads\/proposal-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const MAX_PACK = 12 * 1024 * 1024;
 const MAX_JSON = 17 * 1024 * 1024;
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -46,9 +47,10 @@ function sourceBudget(path, state = { bytes: 0, files: 0 }) {
     if (stat.isDirectory()) sourceBudget(child, state);
   }
 }
-function validateMain(repo) {
-  const entries = run(repo, ["ls-tree", "-rz", "refs/heads/main"]).toString("utf8").split("\0").filter(Boolean);
+function validateMain(repo, ref = "refs/heads/main") {
+  const entries = run(repo, ["ls-tree", "-rz", ref]).toString("utf8").split("\0").filter(Boolean);
   if (!entries.length || entries.length > 100) throw new Error("Repository file limit exceeded.");
+  const blobs = [];
   for (const entry of entries) {
     const match = /^100644 blob ([a-f0-9]{40})\t(.+)$/.exec(entry);
     const path = match?.[2];
@@ -57,9 +59,16 @@ function validateMain(repo) {
         /(?:^|\/)(?:node_modules|hooks|config|credentials)(?:\/|$)/i.test(path)) {
       throw new Error("Snapshot contains an unsupported file path or file mode.");
     }
-    if (Number(run(repo, ["cat-file", "-s", match[1]]).toString()) > 65536) {
-      throw new Error("Snapshot contains an oversized text file.");
-    }
+    blobs.push(match[1]);
+  }
+  // One bounded batch per tree, not one child process per submitted file.
+  const sizes = run(repo, ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+    blobs.join("\n") + "\n").toString().trim().split("\n");
+  if (sizes.length !== blobs.length || sizes.some((line, index) => {
+    const match = /^([a-f0-9]{40}) blob ([0-9]+)$/.exec(line);
+    return !match || match[1] !== blobs[index] || Number(match[2]) > 65536;
+  })) {
+    throw new Error("Snapshot contains an oversized or invalid text file.");
   }
 }
 export function exportRepositorySnapshot(sourceRoot, id, backupRoot) {
@@ -76,15 +85,28 @@ export function exportRepositorySnapshot(sourceRoot, id, backupRoot) {
   run(source, ["fsck", "--full", "--strict", "--no-reflogs"]);
   validateMain(source);
   const refs = run(source, ["for-each-ref", "--format=%(refname) %(objectname)"]).toString().trim().split("\n");
-  if (refs.length !== 1 || !/^refs\/heads\/main [a-f0-9]{40}$/.test(refs[0])) throw new Error("Unsupported repository references.");
+  if (refs.length > 201) throw new Error("Repository reference budget exceeded.");
+  const proposals = {};
+  let main;
+  for (const entry of refs) {
+    const [name, oid, extra] = entry.split(" ");
+    if (!OID.test(oid) || extra) throw new Error("Unsupported repository references.");
+    if (name === "refs/heads/main") main = oid;
+    else if (PROPOSAL_REF.test(name)) {
+      if (run(source, ["cat-file", "-t", oid]).toString().trim() !== "commit") throw new Error("Proposal is not a commit.");
+      validateMain(source, name);
+      proposals[name] = oid;
+    } else throw new Error("Unsupported repository references.");
+  }
+  if (!main) throw new Error("Main reference is required.");
   // Include orphan proposal commits too: proposals have not yet moved main.
   const commits = run(source, ["cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)"])
     .toString().trim().split("\n").filter(line => /^[a-f0-9]{40} commit$/.test(line)).map(line => line.slice(0, 40));
   if (!commits.length || commits.length > 2000) throw new Error("Snapshot commit budget exceeded.");
   const pack = run(source, ["pack-objects", "--stdout", "--revs"], commits.join("\n") + "\n", MAX_PACK);
   const document = Buffer.from(JSON.stringify({
-    version: 1, repositoryId: id, createdAt: new Date().toISOString(),
-    main: refs[0].split(" ")[1], packSha256: hash(pack), pack: pack.toString("base64"),
+    version: 2, repositoryId: id, createdAt: new Date().toISOString(),
+    main, packSha256: hash(pack), pack: pack.toString("base64"), proposals,
   }) + "\n");
   if (document.length > MAX_JSON) throw new Error("Snapshot size limit exceeded.");
   const file = join(destination, `${id}-${hash(document)}.gitai-snapshot.json`);
@@ -108,12 +130,21 @@ export function restoreRepositorySnapshot(snapshotFile, expectedId, targetRoot) 
     throw new Error("Use a bounded regular snapshot file, not a symlink.");
   }
   const snapshot = JSON.parse(readFileSync(file, "utf8"));
-  if (!snapshot || Object.keys(snapshot).sort().join(",") !== "createdAt,main,pack,packSha256,repositoryId,version" ||
-      snapshot.version !== 1 || snapshot.repositoryId !== expectedId || !OID.test(snapshot.main) ||
+  const expectedKeys = snapshot?.version === 2
+    ? "createdAt,main,pack,packSha256,proposals,repositoryId,version"
+    : "createdAt,main,pack,packSha256,repositoryId,version";
+  if (!snapshot || Object.keys(snapshot).sort().join(",") !== expectedKeys ||
+      ![1, 2].includes(snapshot.version) || snapshot.repositoryId !== expectedId || !OID.test(snapshot.main) ||
       !/^[a-f0-9]{64}$/.test(snapshot.packSha256) ||
       typeof snapshot.createdAt !== "string" || !Number.isFinite(Date.parse(snapshot.createdAt)) ||
       typeof snapshot.pack !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(snapshot.pack)) {
     throw new Error("Invalid snapshot schema or repository identity.");
+  }
+  const proposals = snapshot.version === 2 ? snapshot.proposals : {};
+  if (!proposals || typeof proposals !== "object" || Array.isArray(proposals) ||
+      Object.keys(proposals).length > 200 ||
+      Object.entries(proposals).some(([ref, oid]) => !PROPOSAL_REF.test(ref) || typeof oid !== "string" || !OID.test(oid))) {
+    throw new Error("Invalid snapshot proposal references.");
   }
   const pack = Buffer.from(snapshot.pack, "base64");
   if (pack.length > MAX_PACK || pack.toString("base64") !== snapshot.pack || hash(pack) !== snapshot.packSha256) {
@@ -132,6 +163,11 @@ export function restoreRepositorySnapshot(snapshotFile, expectedId, targetRoot) 
     run(stage, ["index-pack", "--strict", "--stdin"], pack);
     if (run(stage, ["cat-file", "-t", snapshot.main]).toString().trim() !== "commit") throw new Error("Main is not a commit.");
     run(stage, ["update-ref", "refs/heads/main", snapshot.main]);
+    for (const [ref, oid] of Object.entries(proposals)) {
+      if (run(stage, ["cat-file", "-t", oid]).toString().trim() !== "commit") throw new Error("Proposal is not a commit.");
+      run(stage, ["update-ref", ref, oid]);
+      validateMain(stage, ref);
+    }
     run(stage, ["fsck", "--full", "--strict", "--no-reflogs"]);
     validateMain(stage);
     if (readdirSync(root).includes(expectedId)) throw new Error("Restore destination appeared during validation.");
@@ -144,7 +180,8 @@ export function restoreRepositorySnapshot(snapshotFile, expectedId, targetRoot) 
     rmSync(lockFile);
   }
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (process.argv[1] && import.meta.url.endsWith("/tools/gitai-repository-snapshot.mjs") &&
+    import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const [command, first, id, destination, ...extra] = process.argv.slice(2);
   try {
     if (extra.length || !first || !id || !destination || !["export", "restore"].includes(command)) {

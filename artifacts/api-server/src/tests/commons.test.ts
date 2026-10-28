@@ -8,6 +8,46 @@ import { quoteFees } from "../lib/fees";
 import { createBid, actOnBid } from "../lib/marketplace";
 import express from "express";
 import gitaiRouter from "../routes/gitai";
+import { createPrivateRepositoryArchive, type SnapshotObjectMetadata } from "../lib/private-repository-archive";
+import { createRepositoryStorage, withTestRepositoryStorage } from "../lib/repository-storage";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { GIT_ROOT } from "../lib/git-store";
+
+function syntheticArchive() {
+  const objects = new Map<string, { bytes: Buffer; generation: string; metadata: SnapshotObjectMetadata["custom"] }>();
+  let unavailable = false;
+  let barrier: (() => Promise<void>) | undefined;
+  return {
+    archive: createPrivateRepositoryArchive({
+      directory: "/test-bucket/private", scope: "test", driver: {
+        async create(key, bytes, metadata) {
+          if (unavailable) throw new Error("synthetic outage");
+          await barrier?.();
+          if (objects.has(key)) throw Object.assign(new Error("exists"), { code: 412 });
+          objects.set(key, { bytes: Buffer.from(bytes), generation: "1", metadata: metadata.custom });
+          return { generation: "1" };
+        },
+        async read(key) {
+          if (unavailable) throw new Error("synthetic outage");
+          const object = objects.get(key);
+          if (!object) throw new Error("missing");
+          return { ...object, bytes: Buffer.from(object.bytes) };
+        },
+      },
+    }),
+    fail: () => { unavailable = true; }, recover: () => { unavailable = false; },
+    synchronizeNextTwoWrites() {
+      let arrived = 0;
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      barrier = async () => {
+        if (++arrived === 2) { barrier = undefined; release(); }
+        await gate;
+      };
+    },
+  };
+}
 
 test("fee quotes use 4%+4%, immutable deterministic ids and cumulative refund reconciliation", () => {
   const q = quoteFees(10000);
@@ -403,6 +443,78 @@ test("disposable DB: Git, tenant isolation, consent, subcontracts, gated deliver
     await assert.rejects(commons.createRecord(alice, { kind: "invitation", title: "Expired", body: "", data: { recipient: "fixture", expiresAt: "2020-01-01T00:00:00.000Z", role: "member", scope: "community-only" } }), /expiry/);
     await commons.changeRecord(alice, service.id, { action: "delete" });
     assert.equal((await commons.listRecords(alice)).some(r => r.id === service.id), false);
+    // Real application workflows against a disposable DB and synthetic object
+    // transports. No live provider, existing repository or production DB.
+    const primary = syntheticArchive(), backup = syntheticArchive();
+    const storage = createRepositoryStorage(primary.archive, backup.archive, "test");
+    let durableId = "";
+    await withTestRepositoryStorage(storage, async () => {
+      const repo = await commons.createRecord(alice, {
+        kind: "repository", title: "Durable synthetic repo", body: "",
+        data: { slug: "durable-synthetic", visibility: "private", license: "UNLICENSED" },
+      });
+      durableId = repo.id;
+      assert.equal("_gitCheckpoint" in repo.data, false);
+      assert.equal(existsSync(join(GIT_ROOT, repo.id)), false);
+      const initial = await commons.repositoryDetail(alice, repo.id);
+      await assert.rejects(commons.repositoryDetail(bob, repo.id), /not found/);
+      await assert.rejects(commons.proposeChange(bob, repo.id, {
+        base: initial.head, path: "bad.txt", content: "bad", message: "Unauthorized",
+      }), /not found/);
+      const proposal = await commons.proposeChange(alice, repo.id, {
+        base: initial.head, path: "durable.txt", content: "synthetic durable content", message: "Durable proposal",
+      });
+      const proposedDetail = await commons.repositoryDetail(alice, repo.id);
+      assert.equal(proposedDetail.head, initial.head);
+      assert.equal(proposedDetail.proposals.find(p => p.id === proposal.id)?.data.content, "synthetic durable content");
+      const proposalMetadata = await pool.query("SELECT data FROM gitai_records WHERE id = $1", [proposal.id]);
+      assert.equal("content" in proposalMetadata.rows[0].data, false, "Durable proposal file bytes belong in object storage, not PostgreSQL");
+      const beforeSqlFailure = await pool.query(
+        "SELECT id, status, data FROM gitai_records WHERE id = $1 OR data->>'repositoryId' = $1 ORDER BY id", [repo.id],
+      );
+      // Force failure AFTER proposal insert but BEFORE checkpoint update. The
+      // trigger and all affected records live only in this disposable schema.
+      await pool.query(`CREATE FUNCTION "${schema}".reject_checkpoint_update() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'synthetic checkpoint update failure'; END;
+      $$`);
+      await pool.query(`CREATE TRIGGER reject_checkpoint_update BEFORE UPDATE ON gitai_records
+        FOR EACH ROW WHEN (NEW.title = 'Durable synthetic repo')
+        EXECUTE FUNCTION "${schema}".reject_checkpoint_update()`);
+      try {
+        await assert.rejects(commons.proposeChange(alice, repo.id, {
+          base: initial.head, path: "rollback.txt", content: "Never committed to database", message: "Rolled-back proposal",
+        }));
+      } finally {
+        await pool.query("DROP TRIGGER reject_checkpoint_update ON gitai_records");
+        await pool.query(`DROP FUNCTION "${schema}".reject_checkpoint_update()`);
+      }
+      const afterSqlFailure = await pool.query(
+        "SELECT id, status, data FROM gitai_records WHERE id = $1 OR data->>'repositoryId' = $1 ORDER BY id", [repo.id],
+      );
+      assert.deepEqual(afterSqlFailure.rows, beforeSqlFailure.rows, "SQL failure must roll back BOTH proposal insert and checkpoint update");
+      primary.synchronizeNextTwoWrites();
+      const races = await Promise.allSettled(["one", "two"].map(suffix => commons.proposeChange(alice, repo.id, {
+        base: initial.head, path: `race-${suffix}.txt`, content: suffix, message: `Race ${suffix}`,
+      })));
+      assert.equal(races.filter(result => result.status === "fulfilled").length, 1);
+      const conflict = races.find(result => result.status === "rejected");
+      assert.ok(conflict?.status === "rejected" && conflict.reason.status === 409);
+      const before = await pool.query("SELECT id, status, data FROM gitai_records WHERE id = $1 OR id = $2 ORDER BY id", [repo.id, proposal.id]);
+      backup.fail();
+      await assert.rejects(commons.mergeChange(alice, repo.id, { proposalId: proposal.id, reviewed: true }), /unavailable/);
+      const after = await pool.query("SELECT id, status, data FROM gitai_records WHERE id = $1 OR id = $2 ORDER BY id", [repo.id, proposal.id]);
+      assert.deepEqual(after.rows, before.rows, "Backup failure must not change the database checkpoint or proposal status");
+      backup.recover();
+      await commons.mergeChange(alice, repo.id, { proposalId: proposal.id, reviewed: true });
+      primary.fail();
+      const recovered = await commons.repositoryDetail(alice, repo.id);
+      assert.equal(recovered.head, proposal.data.commit);
+      assert.equal(recovered.files.find(file => file.path === "durable.txt")?.content, "synthetic durable content");
+      assert.equal(recovered.proposals.find(p => p.id === proposal.id)?.status, "merged");
+      assert.equal("_gitCheckpoint" in recovered.repository.data, false);
+      assert.equal(existsSync(join(GIT_ROOT, repo.id)), false);
+    });
+    await assert.rejects(commons.repositoryDetail(alice, durableId), /cannot fall back/);
   } finally {
     for (const id of repositories) removeRepo(id);
     const cleanup = await pool.connect();

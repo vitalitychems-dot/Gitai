@@ -136,6 +136,22 @@ while anonymous and unrelated exports do not.
   upload/retry/read/restore/delete run passed under `NODE_OPTIONS=--trace-warnings`.
   `@aws-sdk/client-s3` 3.1156.0 is Apache-2.0 and passed the dependency audit.
 
+## Replicated repository workflow verification
+
+The opt-in development adapter is now connected to repository create, proposal,
+merge and read operations, but has not been enabled for live records. Root
+tests exercise ephemeral working copies and synthetic storage. Disposable DB
+tests additionally verify concurrent CAS conflicts, forced SQL rollback between
+proposal insert and checkpoint update, backup failure with unchanged metadata,
+tenant isolation, Git-backed proposal review content and backup recovery reads.
+Snapshot version 2 preserves actual `proposal-<UUID>` refs; version 1 remains
+readable. Neither synthetic transports nor disposable DB receipts establish
+live R2 availability, production activation or signed-in browser acceptance.
+The current App Storage smoke also passed with an 830-byte version-2 synthetic
+snapshot: named proposal/main recovery, retry idempotency, denied anonymous
+access and verification-object cleanup, with no SDK listener warning.
+See `docs/REPOSITORY-STORAGE.md`.
+
 ## Reproduce
 
 ```sh
@@ -150,7 +166,7 @@ pnpm --filter @workspace/scripts exec tsx \
 # Both configurations required. Verifies both immutable copies, then restores from R2.
 pnpm --filter @workspace/scripts exec tsx \
   ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --dual
-pnpm --filter @workspace/scripts exec tsx --test \
+NODE_ENV=test pnpm --filter @workspace/scripts exec tsx --test \
   ../artifacts/api-server/src/tests/commons.test.ts
 node --test tools/gitai-offline.test.mjs
 python3 tools/test-network-denied.py

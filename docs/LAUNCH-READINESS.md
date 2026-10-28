@@ -59,13 +59,18 @@ still requires separate operator verification. Synthetic in-memory transports
 prove failure/retry behavior and real Git recovery after source/primary loss;
 they do not prove live R2 availability or independent infrastructure.
 
-Neither snapshot adapter is wired into application Git mutations or reads.
+An opt-in development path now wires both adapters into actual repository
+create/propose/merge/read operations. It stages private working copies, verifies
+both archives, and atomically commits a CAS-checked checkpoint with proposal
+metadata/status in SQL. Disposable-schema tests cover SQL rollback, concurrent
+edits, backup outages and recovery. It has NOT been enabled for live records.
 App Storage is the only provider exercised remotely. No R2 account, private
 bucket, credentials, live R2 upload or independent restore has been verified.
-This remains a snapshot archive, not an active hosted Git backend, database/Git
-consistency mechanism, retention policy or proven independent backup. Production
-remains fail-closed until durable Git/database consistency and an independently
-provisioned, restore-verified backup are implemented and tested.
+This is not yet an enabled production Git backend, retention policy or proven
+independent backup. Production remains hard-gated pending live provider proof,
+owner designation, authenticated acceptance, source reconciliation and a reviewed
+activation. See `docs/REPOSITORY-STORAGE.md` for exact invariants, limits,
+migration restrictions and rollback requirements.
 
 ## Private operator recovery
 
@@ -112,8 +117,9 @@ SHA-256 detects corruption, not authenticity or a malicious replacement. Store i
 only in approved encrypted private backup storage, never public Git, app assets,
 chat or model prompts. The CLI prints only operator-requested artifact paths and
 checksums, not source, identities or credentials. It is bounded to 12 MiB of Git
-pack data and 2,000 commits per snapshot, and restores only the supported `main`
-reference while retaining proposal objects. No retention or automated deletion
+pack data and 2,000 commits per snapshot. Current version 2 restores `main` and
+at most 200 validated UUID-named proposal refs; legacy version 1 restores main
+while retaining proposal objects. No retention or automated deletion
 policy is assumed. Quiesce the destination during recovery; a stale recovery lock
 after a hard kill must be investigated before manual removal.
 

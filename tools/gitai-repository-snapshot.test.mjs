@@ -23,7 +23,9 @@ function fixture() {
   const main = git(["commit-tree", tree], "Synthetic main\n");
   git(["update-ref", "refs/heads/main", main]);
   const proposal = git(["commit-tree", tree, "-p", main], "Unmerged synthetic proposal\n");
-  return { root, source, backup, restored, id, repo, main, proposal, git };
+  const proposalRef = `refs/heads/proposal-${randomUUID()}`;
+  git(["update-ref", proposalRef, proposal]);
+  return { root, source, backup, restored, id, repo, main, proposal, proposalRef, git };
 }
 test("private snapshot restores real history and orphan proposals without copying hooks/config", () => {
   const f = fixture();
@@ -40,6 +42,17 @@ test("private snapshot restores real history and orphan proposals without copyin
     assert.equal(result.head, f.main);
     assert.equal(f.git(["show", "main:README.md"], undefined, restored), "synthetic content");
     assert.equal(f.git(["cat-file", "-t", f.proposal], undefined, restored), "commit");
+    assert.equal(f.git(["rev-parse", f.proposalRef], undefined, restored), f.proposal);
+    const document = JSON.parse(readFileSync(snapshot.file, "utf8"));
+    assert.equal(document.version, 2);
+    const legacy = join(f.root, "legacy");
+    mkdirSync(legacy, { mode: 0o700 });
+    delete document.proposals;
+    document.version = 1;
+    const legacyFile = join(f.backup, "legacy.json");
+    writeFileSync(legacyFile, JSON.stringify(document), { mode: 0o600 });
+    assert.equal(restoreRepositorySnapshot(legacyFile, f.id, legacy).head, f.main);
+    assert.equal(f.git(["cat-file", "-t", f.proposal], undefined, join(legacy, f.id)), "commit");
     assert.equal(existsSync(join(restored, "hooks", "post-update")), false);
     assert.equal(f.git(["config", "--list"], undefined, restored).includes("gitai.synthetic-marker"), false);
     assert.throws(() => restoreRepositorySnapshot(snapshot.file, f.id, f.restored), /never replaces/);
@@ -56,6 +69,8 @@ test("cross-tenant IDs, corruption, unexpected fields and paths fail before publ
     for (const changed of [
       { ...document, packSha256: "0".repeat(64) },
       { ...document, hooks: "/tmp/not-allowed" },
+      { ...document, proposals: { "refs/heads/other": document.main } },
+      { ...document, proposals: { [f.proposalRef]: "--help" } },
       { ...document, main: "--help" },
       { ...document, pack: document.pack + "\n" },
       { ...document, pack: invalidPack.toString("base64"), packSha256: createHash("sha256").update(invalidPack).digest("hex") },

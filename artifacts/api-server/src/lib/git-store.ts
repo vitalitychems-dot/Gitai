@@ -2,12 +2,23 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { lstatSync, realpathSync } from "node:fs";
 import { assertRepositoryStorageReady } from "./release-readiness";
 
 // Test/development cache can be isolated. Production never uses this filesystem.
 export const GIT_ROOT = resolve(process.env.NODE_ENV !== "production" && process.env.GITAI_GIT_ROOT
   ? process.env.GITAI_GIT_ROOT : "runtime/gitai/repos");
-const ID = /^[0-9a-f-]{36}$/;
+const workingRoot = new AsyncLocalStorage<string>();
+export function withEphemeralGitRoot<T>(root: string, fn: () => Promise<T>): Promise<T> {
+  assertRepositoryStorageReady();
+  const stat = lstatSync(root);
+  if (!stat.isDirectory() || realpathSync(root) !== root || (stat.mode & 0o077)) {
+    throw new Error("Repository working directory is unavailable.");
+  }
+  return workingRoot.run(root, fn);
+}
+const ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const OID = /^[0-9a-f]{40}$/;
 export function safePath(path: string) {
   if (path.length > 200 || !/^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(path) ||
@@ -20,7 +31,7 @@ export function safePath(path: string) {
 function folder(id: string) {
   assertRepositoryStorageReady();
   if (!ID.test(id)) throw Object.assign(new Error("Invalid repository ID."), { status: 400 });
-  return join(GIT_ROOT, id);
+  return join(workingRoot.getStore() ?? GIT_ROOT, id);
 }
 function env(extra: Record<string, string> = {}) {
   return {
@@ -33,7 +44,7 @@ function env(extra: Record<string, string> = {}) {
   };
 }
 export function git(id: string, args: string[], input?: string, extra = {}, raw = false) {
-  const output = execFileSync("git", ["--no-pager", "-c", "core.hooksPath=/dev/null",
+  const output = execFileSync("git", ["--no-pager", "--no-replace-objects", "-c", "core.hooksPath=/dev/null",
     "-c", "core.fsmonitor=false", "-c", "protocol.allow=never", "--git-dir", folder(id), ...args],
     { env: env(extra), input, encoding: "utf8", timeout: 5000, maxBuffer: 2 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] });
   return raw ? output : output.trimEnd();
@@ -46,7 +57,7 @@ export function checkRepoBudget(id: string) {
 }
 export function initRepo(id: string, title: string, license: string) {
   assertRepositoryStorageReady();
-  mkdirSync(GIT_ROOT, { recursive: true, mode: 0o700 });
+  mkdirSync(workingRoot.getStore() ?? GIT_ROOT, { recursive: true, mode: 0o700 });
   execFileSync("git", ["-c", "core.hooksPath=/dev/null", "init", "--bare", "--template=", "--initial-branch=main", folder(id)],
     { env: env(), timeout: 5000, stdio: "pipe" });
   return writeCommit(id, null, "README.md", `# ${title}\n\nLicense selection: ${license}.\n\nCreated by the repository operator in GitAI. No external publication.\n`, "Initialize repository");

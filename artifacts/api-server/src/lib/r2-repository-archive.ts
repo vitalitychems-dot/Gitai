@@ -121,7 +121,7 @@ async function readBoundedBody(body: unknown, signal: AbortSignal): Promise<Buff
 const r2MetadataShape = z.object({
   gitaiRepositoryId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
   gitaiSnapshotSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  gitaiSnapshotVersion: z.literal("1"),
+  gitaiSnapshotVersion: z.enum(["1", "2"]),
   gitaiScope: z.enum(["production", "development", "verification", "test"]),
 }).strict();
 

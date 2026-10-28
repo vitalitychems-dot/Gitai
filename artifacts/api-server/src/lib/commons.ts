@@ -3,7 +3,8 @@ import { and, desc, eq, lt, ne, or, sql } from "drizzle-orm";
 import { db, commonsRecords as records, type CommonsRecordRow } from "@workspace/db";
 import { CreateRecordBody, ChangeRecordBody, ProposeChangeBody, MergeChangeBody } from "@workspace/api-zod";
 import { z } from "zod/v4";
-import { git, initRepo, removeRepo, head, writeCommit, readRepo, mergeRepo } from "./git-store";
+import { git, initRepo, removeRepo, head, writeCommit, readRepo, mergeRepo, safePath } from "./git-store";
+import { assertSameCheckpoint, configuredRepositoryStorage, storageForRepository } from "./repository-storage";
 
 export const quotas = { repositories: 5, records: 200, fileBytes: 65536, repositoryBytes: 10485760 };
 export function subject(id: string) { return createHash("sha256").update(`gitai:${id}`).digest("hex"); }
@@ -30,9 +31,10 @@ const dataSchemas = {
 };
 export function serial(row: CommonsRecordRow) {
   const { namespace: _, ...result } = row;
+  const { _gitCheckpoint: _checkpoint, ...publicData } = row.data;
   const expired = row.kind === "invitation" && row.status === "draft" &&
     Date.parse(String(row.data.expiresAt)) <= Date.now();
-  return { ...result, status: expired ? "expired" : row.status, createdAt: row.createdAt.toISOString() };
+  return { ...result, data: publicData, status: expired ? "expired" : row.status, createdAt: row.createdAt.toISOString() };
 }
 export async function findRecord(id: string, connection: Pick<typeof db, "select"> = db) {
   if (!z.uuid().safeParse(id).success) fail("Record not found.", 404);
@@ -208,19 +210,28 @@ export async function createRecord(actor: string, input: unknown) {
     if (v.kind === "comment" && !["post", "comment"].includes(parent.kind)) fail("Comments require a post or comment.");
   }
   const id = randomUUID();
-  return locked(async tx => {
+  const namespace = v.kind === "repository" ? `${actor}/${data.slug}` : null;
+  const status = v.kind === "repository" ? "private" : v.kind === "invitation" ? "draft" : "pending";
+  const checkCapacity = async (tx: CommonsTx) => {
     const mine = await tx.select().from(records).where(eq(records.owner, actor));
     if (mine.length >= quotas.records) fail("Record quota reached (200). Delete does not reset the audit quota.", 429);
     if (v.kind === "repository" && mine.filter(r => r.kind === "repository").length >= quotas.repositories) fail("Repository quota reached (5).", 429);
     if (v.kind === "profile" && mine.some(r => r.kind === "profile" && r.data.kind === data.kind && r.status !== "deleted")) fail("You already have this profile kind.", 409);
-    const namespace = v.kind === "repository" ? `${actor}/${data.slug}` : null;
     if (namespace && mine.some(r => r.namespace === namespace)) fail("Namespace already exists.", 409);
-    const status = v.kind === "repository" ? "private" : v.kind === "invitation" ? "draft" : "pending";
+  };
+  const storage = v.kind === "repository" ? configuredRepositoryStorage() : undefined;
+  // Check before paid storage work, then recheck inside the final DB transaction.
+  if (storage) await locked(checkCapacity);
+  const staged = storage
+    ? await storage.mutate(id, undefined, () => initRepo(id, v.title, String(data.license)))
+    : undefined;
+  return locked(async tx => {
+    await checkCapacity(tx);
     try {
-      if (v.kind === "repository") initRepo(id, v.title, String(data.license));
-      const [r] = await tx.insert(records).values({ id, kind: v.kind, title: v.title, body: v.body, owner: actor, status, namespace, data: { ...data, ...(v.kind === "post" ? { observedAt: new Date().toISOString(), provenance: "operator-submitted; not independently verified", freshness: "as-submitted; no live collector" } : {}), ...(v.kind === "profile" ? { operator: actor, reputationEvidence: [] } : {}) } }).returning();
+      if (v.kind === "repository" && !staged) initRepo(id, v.title, String(data.license));
+      const [r] = await tx.insert(records).values({ id, kind: v.kind, title: v.title, body: v.body, owner: actor, status, namespace, data: { ...data, ...(staged ? { _gitCheckpoint: staged.checkpoint } : {}), ...(v.kind === "post" ? { observedAt: new Date().toISOString(), provenance: "operator-submitted; not independently verified", freshness: "as-submitted; no live collector" } : {}), ...(v.kind === "profile" ? { operator: actor, reputationEvidence: [] } : {}) } }).returning();
       return serial(r);
-    } catch (e) { if (v.kind === "repository") removeRepo(id); throw e; }
+    } catch (e) { if (v.kind === "repository" && !staged) removeRepo(id); throw e; }
   });
 }
 export async function changeRecord(actor: string, id: string, input: unknown) {
@@ -266,15 +277,63 @@ export async function changeRecord(actor: string, id: string, input: unknown) {
   });
 }
 export async function repositoryDetail(actor: string, id: string) {
-  const r = await findRecord(id);
-  if (r.kind !== "repository" || !canRead(r, actor) || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
-  const proposals = await db.select().from(records).where(and(eq(records.kind, "proposal"), sql`${records.data}->>'repositoryId' = ${id}`));
-  return { repository: serial(r), ...readRepo(id), proposals: proposals.filter(p => r.owner === actor || p.owner === actor || p.status === "merged").map(serial) };
+  // Capture checkpoint and proposal statuses from ONE database snapshot. Release
+  // the transaction before doing storage I/O; no global lock waits on a provider.
+  const { r, proposals } = await db.transaction(async tx => {
+    const r = await findRecord(id, tx);
+    if (r.kind !== "repository" || !canRead(r, actor) || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
+    const proposals = await tx.select().from(records).where(and(eq(records.kind, "proposal"), sql`${records.data}->>'repositoryId' = ${id}`));
+    return { r, proposals };
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
+  const durable = storageForRepository(id, r.data);
+  const visibleProposals = proposals.filter(p => r.owner === actor || p.owner === actor || p.status === "merged");
+  const result = durable
+    ? await durable.storage.read(id, durable.checkpoint, () => ({
+      ...readRepo(id),
+      proposals: visibleProposals.map(p => {
+        const commit = z.string().regex(/^[a-f0-9]{40}$/).parse(p.data.commit);
+        const path = safePath(z.string().parse(p.data.path));
+        const view = serial(p);
+        return { ...view, data: { ...view.data, content: git(id, ["show", `${commit}:${path}`], undefined, {}, true) } as Record<string, unknown> };
+      }),
+    }))
+    : { ...readRepo(id), proposals: visibleProposals.map(serial) };
+  return { repository: serial(r), ...result };
 }
 export async function proposeChange(actor: string, id: string, input: unknown) {
   if (!actor) fail("Sign in first.", 401);
   const v = ProposeChangeBody.parse(input);
   cleanText(v.content); cleanText(v.message);
+  const candidate = await findRecord(id);
+  if (candidate.kind !== "repository" || candidate.owner !== actor || ["deleted", "revoked"].includes(candidate.status)) fail("Repository not found.", 404);
+  const durable = storageForRepository(id, candidate.data);
+  if (durable) {
+    if (durable.checkpoint.main !== v.base) fail("Base changed. Reload and review again.", 409);
+    const mine = await db.select({ id: records.id }).from(records).where(eq(records.owner, actor));
+    if (mine.length >= quotas.records) fail("Record quota reached.", 429);
+    const pid = randomUUID();
+    const staged = await durable.storage.mutate(id, durable.checkpoint, () => {
+      if (head(id) !== v.base) fail("Base changed. Reload and review again.", 409);
+      const commit = writeCommit(id, v.base, v.path, v.content, v.message);
+      git(id, ["update-ref", `refs/heads/proposal-${pid}`, commit]);
+      return commit;
+    });
+    // A crash before this transaction leaves unreferenced immutable snapshots,
+    // never a published proposal pointing at objects that were not replicated.
+    return locked(async tx => {
+      const r = await findRecord(id, tx);
+      if (r.owner !== actor || r.kind !== "repository" || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
+      assertSameCheckpoint(durable.checkpoint, r.data);
+      await assertRecordCapacity(tx, actor);
+      const [p] = await tx.insert(records).values({
+        id: pid, kind: "proposal", title: v.message, body: "", owner: actor,
+        status: "proposed", namespace: null, data: { repositoryId: id, base: v.base, path: v.path, message: v.message, commit: staged.value },
+      }).returning();
+      await tx.update(records).set({ data: { ...r.data, _gitCheckpoint: staged.checkpoint } }).where(eq(records.id, id));
+      const view = serial(p);
+      return { ...view, data: { ...view.data, content: v.content } as Record<string, unknown> };
+    });
+  }
   return locked(async tx => {
     const r = await findRecord(id, tx);
     // Membership expansion intentionally gated; no implicit agent access.
@@ -292,6 +351,26 @@ export async function proposeChange(actor: string, id: string, input: unknown) {
 export async function mergeChange(actor: string, id: string, input: unknown) {
   const v = MergeChangeBody.parse(input);
   if (!v.reviewed) fail("Explicit review confirmation is required.");
+  const candidate = await findRecord(id);
+  if (!actor || candidate.owner !== actor || candidate.kind !== "repository" || ["deleted", "revoked"].includes(candidate.status)) fail("Repository not found.", 404);
+  const durable = storageForRepository(id, candidate.data);
+  if (durable) {
+    const proposal = await findRecord(v.proposalId);
+    if (proposal.kind !== "proposal" || proposal.data.repositoryId !== id || proposal.status !== "proposed") fail("Open proposal not found.", 404);
+    const staged = await durable.storage.mutate(id, durable.checkpoint, () => {
+      if (head(id) !== proposal.data.commit) mergeRepo(id, String(proposal.data.base), String(proposal.data.commit));
+    });
+    return locked(async tx => {
+      const r = await findRecord(id, tx), p = await findRecord(v.proposalId, tx);
+      if (r.owner !== actor || r.kind !== "repository" || ["deleted", "revoked"].includes(r.status)) fail("Repository not found.", 404);
+      assertSameCheckpoint(durable.checkpoint, r.data);
+      if (p.kind !== "proposal" || p.data.repositoryId !== id || p.status !== "proposed" ||
+          p.data.commit !== proposal.data.commit || p.data.base !== proposal.data.base) fail("Open proposal changed. Review again.", 409);
+      await tx.update(records).set({ data: { ...r.data, _gitCheckpoint: staged.checkpoint } }).where(eq(records.id, id));
+      const [result] = await tx.update(records).set({ status: "merged" }).where(eq(records.id, p.id)).returning();
+      return serial(result);
+    });
+  }
   return locked(async tx => {
     const r = await findRecord(id, tx);
     const p = await findRecord(v.proposalId, tx);

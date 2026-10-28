@@ -9,14 +9,21 @@ const MAX_PACK_BYTES = 12 * 1024 * 1024;
 const MAX_SNAPSHOT_BYTES = 17 * 1024 * 1024;
 const MAX_BASE64_CHARS = Math.ceil(MAX_PACK_BYTES / 3) * 4;
 
-const snapshotShape = z.object({
-  version: z.literal(1),
+const snapshotFields = {
   repositoryId: z.string().regex(UUID),
   createdAt: z.iso.datetime(),
   main: z.string().regex(/^[a-f0-9]{40}$/),
   packSha256: z.string().regex(SHA256),
   pack: z.string().min(4).max(MAX_BASE64_CHARS).regex(/^[A-Za-z0-9+/]+={0,2}$/),
-}).strict();
+};
+const proposalRefs = z.record(
+  z.string().regex(/^refs\/heads\/proposal-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/),
+  z.string().regex(/^[a-f0-9]{40}$/),
+).refine(refs => Object.keys(refs).length <= 200);
+const snapshotShape = z.discriminatedUnion("version", [
+  z.object({ version: z.literal(1), ...snapshotFields }).strict(),
+  z.object({ version: z.literal(2), ...snapshotFields, proposals: proposalRefs }).strict(),
+]);
 
 export type ArchiveScope = "production" | "development" | "verification" | "test";
 
@@ -26,7 +33,7 @@ export type SnapshotObjectMetadata = {
   custom: {
     gitaiRepositoryId: string;
     gitaiSnapshotSha256: string;
-    gitaiSnapshotVersion: "1";
+    gitaiSnapshotVersion: "1" | "2";
     gitaiScope: ArchiveScope;
   };
 };
@@ -73,7 +80,7 @@ function validateDocument(expectedId: string, input: Uint8Array) {
   }
   const bytes = Buffer.from(JSON.stringify(result.data), "utf8");
   if (bytes.byteLength > MAX_SNAPSHOT_BYTES) fail("Invalid private archive document size.");
-  return { bytes, sha: sha256(bytes), repositoryId: expectedId };
+  return { bytes, sha: sha256(bytes), repositoryId: expectedId, version: String(result.data.version) as "1" | "2" };
 }
 
 function validatePrivateDirectory(raw: string | undefined) {
@@ -108,10 +115,10 @@ export function createPrivateRepositoryArchive(
       `${snapshotHash}.json`,
     ].filter(Boolean).join("/");
   };
-  const expectedMetadata = (repositoryId: string, snapshotHash: string): SnapshotObjectMetadata["custom"] => ({
+  const expectedMetadata = (repositoryId: string, snapshotHash: string, version: "1" | "2"): SnapshotObjectMetadata["custom"] => ({
     gitaiRepositoryId: repositoryId,
     gitaiSnapshotSha256: snapshotHash,
-    gitaiSnapshotVersion: "1",
+    gitaiSnapshotVersion: version,
     gitaiScope: scope,
   });
 
@@ -120,7 +127,8 @@ export function createPrivateRepositoryArchive(
     let remote: Awaited<ReturnType<SnapshotObjectDriver["read"]>>;
     try { remote = await driver.read(key); }
     catch { return fail(); }
-    const expected = expectedMetadata(repositoryId, snapshotHash);
+    if (!["1", "2"].includes(remote.metadata.gitaiSnapshotVersion)) fail("Unsupported private archive version.");
+    const expected = expectedMetadata(repositoryId, snapshotHash, remote.metadata.gitaiSnapshotVersion);
     const metadataMatches = Object.keys(expected).every(
       k => remote.metadata[k as keyof typeof expected] === expected[k as keyof typeof expected],
     );
@@ -132,7 +140,7 @@ export function createPrivateRepositoryArchive(
     catch {
       return fail("Private repository archive content failed verification.");
     }
-    if (local.sha !== snapshotHash) {
+    if (local.sha !== snapshotHash || local.version !== remote.metadata.gitaiSnapshotVersion) {
       fail("Private repository archive digest failed verification.");
     }
     return { bytes: local.bytes, generation: remote.generation };
@@ -145,7 +153,7 @@ export function createPrivateRepositoryArchive(
       const metadata: SnapshotObjectMetadata = {
         contentType: "application/json",
         cacheControl: "private, no-store",
-        custom: expectedMetadata(repositoryId, local.sha),
+        custom: expectedMetadata(repositoryId, local.sha, local.version),
       };
       try {
         const stored = await driver.create(key, local.bytes, metadata);
@@ -256,7 +264,7 @@ function gcsSnapshotDriver(bucketName: string, scope: ArchiveScope): SnapshotObj
         const accepted = z.object({
           gitaiRepositoryId: z.string().regex(UUID),
           gitaiSnapshotSha256: z.string().regex(SHA256),
-          gitaiSnapshotVersion: z.literal("1"),
+          gitaiSnapshotVersion: z.enum(["1", "2"]),
           gitaiScope: z.enum(["production", "development", "verification", "test"]),
         }).strict().safeParse(custom);
         if (!accepted.success || bytes.length !== byteLength) fail();

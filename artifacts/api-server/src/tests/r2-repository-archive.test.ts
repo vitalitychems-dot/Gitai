@@ -7,12 +7,13 @@ import { createR2SnapshotDriver, type R2ObjectTransport } from "../lib/r2-reposi
 function makeSnapshot(repositoryId: string) {
   const pack = Buffer.from("synthetic-r2-pack");
   return Buffer.from(JSON.stringify({
-    version: 1,
+    version: 2,
     repositoryId,
     createdAt: "2026-01-01T00:00:00.000Z",
     main: "a".repeat(40),
     packSha256: createHash("sha256").update(pack).digest("hex"),
     pack: pack.toString("base64"),
+    proposals: {},
   }));
 }
 

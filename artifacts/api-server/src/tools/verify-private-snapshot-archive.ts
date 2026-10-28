@@ -63,7 +63,9 @@ function createSyntheticRepository(sourceRoot: string, id: string) {
   const main = git(repository, ["commit-tree", tree], "Synthetic approved main\n");
   git(repository, ["update-ref", "refs/heads/main", main]);
   const proposal = git(repository, ["commit-tree", tree, "-p", main], "Synthetic unmerged proposal\n");
-  return { repository, main, proposal };
+  const proposalRef = `refs/heads/proposal-${randomUUID()}`;
+  git(repository, ["update-ref", proposalRef, proposal]);
+  return { repository, main, proposal, proposalRef };
 }
 
 type ArchiveProvider = "app-storage" | "r2" | "dual";
@@ -126,7 +128,7 @@ async function verify() {
 
   try {
     verificationStage = "synthetic Git repository";
-    const { main, proposal } = createSyntheticRepository(sourceRoot, id);
+    const { main, proposal, proposalRef } = createSyntheticRepository(sourceRoot, id);
     verificationStage = "local Git snapshot export";
     const exported = execFileSync(process.execPath, [snapshotTool, "export", sourceRoot, id, localBackup], {
       cwd: workspaceRoot,
@@ -191,7 +193,8 @@ async function verify() {
     const restoredRepository = join(restoreRoot, id);
     if (git(restoredRepository, ["rev-parse", "refs/heads/main"]) !== main ||
         git(restoredRepository, ["show", "main:README.md"]) !== "synthetic repository data" ||
-        git(restoredRepository, ["cat-file", "-t", proposal]) !== "commit") {
+        git(restoredRepository, ["cat-file", "-t", proposal]) !== "commit" ||
+        git(restoredRepository, ["rev-parse", proposalRef]) !== proposal) {
       throw new Error("Remote snapshot did not restore expected synthetic Git history.");
     }
 
