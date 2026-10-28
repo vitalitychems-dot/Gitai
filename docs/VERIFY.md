@@ -113,7 +113,7 @@ while anonymous and unrelated exports do not.
   workflow restart. The browser suite is signed-out only; no authenticated
   browser mutation was tested. No deployment, external Git push, outreach or
   financial operation was performed.
-- A synthetic App Storage smoke check uploaded a 747-byte isolated Git snapshot,
+- A synthetic App Storage smoke check uploaded a 714-byte isolated Git snapshot,
   verified an idempotent retry and generation-bound read, restored its main and
   orphan proposal commit into a second private node, and confirmed anonymous
   storage access was denied. The exact synthetic object was removed. No user
@@ -124,7 +124,9 @@ while anonymous and unrelated exports do not.
   and verification-only deletion. Cloudflare's documented R2 S3 API lacks
   bucket-versioning operations; the adapter does not assume native versions.
   No R2 credentials or bucket are configured, so no live R2 request, independent
-  restore or real backup has been tested.
+  restore or real backup has been tested. The manual R2 smoke command was also
+  run with empty R2 configuration and stopped before network access; this verifies
+  fail-closed configuration handling only, not R2 availability.
 - A dependency upgrade moved workspace schemas to Zod 4.6.7, compatible generated
   schemas to Zod 4, Express to 5.3.0, body-parser to 2.4.0, qs to 6.16.1, and
   fast-uri to 3.1.9. Current pnpm, static and privacy scans report zero findings.
@@ -139,6 +141,12 @@ while anonymous and unrelated exports do not.
 ```sh
 pnpm run typecheck
 pnpm run test
+# Optional operator-only provider smoke tests; the R2 command writes a synthetic object.
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts
+# Run only after configuring a private R2 bucket and its workspace Secrets.
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --r2
 pnpm --filter @workspace/scripts exec tsx --test \
   ../artifacts/api-server/src/tests/commons.test.ts
 node --test tools/gitai-offline.test.mjs

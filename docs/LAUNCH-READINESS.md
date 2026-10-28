@@ -73,6 +73,26 @@ node --test tools/gitai-repository-snapshot.test.mjs
 pnpm run test:launch
 ```
 
+## Manual private archive smoke test
+
+An operator can verify a newly configured provider using only a synthetic
+repository and a random verification key. The default tests App Storage; `--r2`
+selects Cloudflare R2 and requires its account, private bucket and bucket-scoped
+credentials to be configured through the workspace Secrets flow:
+
+```sh
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --r2
+```
+
+This command is not part of startup or CI and was not run against R2 because no
+R2 account is configured. It restores the synthetic main and proposal commits,
+checks a retry, and removes only an object it created in the verification scope.
+The R2 run does not test anonymous access; separately confirm the bucket has
+public access disabled before use.
+
 The snapshot contains private code and commit history. It is **unencrypted**;
 SHA-256 detects corruption, not authenticity or a malicious replacement. Store it
 only in approved encrypted private backup storage, never public Git, app assets,

@@ -99,3 +99,25 @@ and actual tests are documented separately in VERIFY.md.
 The CLI event envelope, local reapproval/quarantine rules, parser resource limits
 and network-denied tests are **GitAI extensions**. SHA-256 is an integrity checksum,
 not a signature. Signed trust/revocation is not implemented.
+
+## Read-only upstream recheck — 2026-10-28
+
+- GitHub metadata reports the canonical `vitalitychems-dot/Gitai` repository,
+  default branch `main`, public and unarchived, 814 KiB, last updated
+  2026-10-25. The protected `main` ref is
+  `708ef2a776bf2b5cbb52612b9a3775c3882e3cd2` (commit time
+  2026-10-25T14:05:04Z). Repository-level SPDX license remains absent.
+- Only the root contents listing and selected files at that exact commit were
+  inspected: `package.json`, selected `replit.md` sections and the beginning of
+  `IDENTITY.md`. The root listing contains no `README.md` or `LICENSE`; the root
+  package's MIT field is not blanket repository or asset license evidence.
+- The root manifest advertises `pnpm run build` as typecheck, test and workspace
+  builds. Its `test:launch` list differs from this workspace's current tests.
+  Upstream build scripts were not executed; no source clone, install, recursive
+  tree, `.agents` contents, or unreviewed executable was fetched or run. The
+  `IDENTITY.md` text was treated as untrusted repository content, not as agent
+  instructions.
+- The local branch was not rebased or merged. The 2026-10-23 merge-base/conflict
+  report has not been recomputed against this newer `main`; preserve the prior
+  publication block until a current pinned diff and security-gate review are
+  complete. No upstream ref, PR, or publication was changed.

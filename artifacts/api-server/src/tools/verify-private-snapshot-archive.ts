@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openConfiguredPrivateRepositoryArchive } from "../lib/private-repository-archive";
+import { openConfiguredPrivateR2RepositoryArchive } from "../lib/r2-repository-archive";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../");
@@ -63,7 +64,22 @@ function createSyntheticRepository(sourceRoot: string, id: string) {
   return { repository, main, proposal };
 }
 
-let verificationStage = "App Storage configuration";
+type ArchiveProvider = "app-storage" | "r2";
+type PrivateArchive = ReturnType<typeof openConfiguredPrivateRepositoryArchive>;
+
+function archiveProviderFromArgs(args: string[]): ArchiveProvider {
+  if (args.length === 0) return "app-storage";
+  if (args.length === 1 && args[0] === "--r2") return "r2";
+  throw new Error("Use no option for App Storage or --r2 for Cloudflare R2.");
+}
+
+function openArchive(provider: ArchiveProvider): PrivateArchive {
+  return provider === "r2"
+    ? openConfiguredPrivateR2RepositoryArchive("verification")
+    : openConfiguredPrivateRepositoryArchive("verification");
+}
+
+let verificationStage = "private archive configuration";
 process.on("warning", warning => {
   if (warning.name === "MaxListenersExceededWarning") {
     console.error(`Storage SDK listener warning observed during: ${verificationStage}.`);
@@ -71,15 +87,19 @@ process.on("warning", warning => {
 });
 
 async function verify() {
-  verificationStage = "Private object directory availability";
-  const privateDir = process.env.PRIVATE_OBJECT_DIR;
-  if (!privateDir) throw new Error("Private App Storage is not configured.");
-  verificationStage = "Private object directory format";
-  const layout = privateDir.trim().replace(/^\/+/, "").split("/");
-  const bucketName = layout[0];
-  if (!/^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/.test(bucketName) ||
-      layout.slice(1).some(part => !/^[A-Za-z0-9._-]{1,200}$/.test(part) || part === "." || part === "..")) {
-    throw new Error("Private App Storage path is invalid.");
+  const provider = archiveProviderFromArgs(process.argv.slice(2));
+  let layout: string[] | undefined;
+  if (provider === "app-storage") {
+    verificationStage = "private App Storage configuration";
+    const privateDir = process.env.PRIVATE_OBJECT_DIR;
+    if (!privateDir) throw new Error("Private App Storage is not configured.");
+    const privatePath = privateDir.trim().replace(/^\/+/, "");
+    layout = privatePath.split("/");
+    const bucketName = layout[0];
+    if (!/^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/.test(bucketName) ||
+        layout.slice(1).some(part => !/^[A-Za-z0-9._-]{1,200}$/.test(part) || part === "." || part === "..")) {
+      throw new Error("Private App Storage path is invalid.");
+    }
   }
 
   verificationStage = "Synthetic fixture setup";
@@ -92,6 +112,7 @@ async function verify() {
   for (const path of [sourceRoot, localBackup, restoreRoot]) privateDirectory(path);
 
   let receipt: Awaited<ReturnType<ReturnType<typeof openConfiguredPrivateRepositoryArchive>["put"]>> | undefined;
+  let archive: PrivateArchive | undefined;
   try {
     verificationStage = "synthetic Git repository";
     const { main, proposal } = createSyntheticRepository(sourceRoot, id);
@@ -107,16 +128,17 @@ async function verify() {
       throw new Error("Synthetic repository snapshot did not validate.");
     }
     const document = readFileSync(localReceipt.file);
-    const archive = openConfiguredPrivateRepositoryArchive("verification");
-    verificationStage = "private App Storage write";
+    verificationStage = `${provider} configuration`;
+    archive = openArchive(provider);
+    verificationStage = `${provider} synthetic snapshot write`;
     const created = await archive.put(id, document);
-    receipt = created;
+    if (created.created) receipt = created;
     verificationStage = "idempotent archive retry";
     const retry = await archive.put(id, document);
     if (!created.created || retry.created || retry.generation !== created.generation) {
       throw new Error("Private archive retry was not idempotent.");
     }
-    verificationStage = "private App Storage read";
+    verificationStage = `${provider} synthetic snapshot read`;
     const downloaded = await archive.get(id, created.sha256);
     const downloadedSha256 = createHash("sha256").update(downloaded.bytes).digest("hex");
     if (downloaded.bytes.length !== created.bytes ||
@@ -142,29 +164,37 @@ async function verify() {
       throw new Error("Remote snapshot did not restore expected synthetic Git history.");
     }
 
-    verificationStage = "anonymous private-object access check";
-    const relativeObjectName = [
-      ...layout.slice(1),
-      "gitai",
-      "repository-snapshots",
-      "v1",
-      "verification",
-      id,
-      `${created.sha256}.json`,
-    ].filter(Boolean).map(encodeURIComponent).join("/");
-    const unauthenticatedUrl = `https://storage.googleapis.com/${encodeURIComponent(bucketName)}/${relativeObjectName}`;
-    const publicResponse = await fetch(unauthenticatedUrl, {
-      method: "GET",
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-    });
-    await publicResponse.body?.cancel();
-    if (publicResponse.status !== 403 && publicResponse.status !== 404) {
-      throw new Error("Synthetic private archive is readable without authentication.");
+    let privacyCheck: { unauthenticatedReadDenied: true } | { unauthenticatedReadCheck: "not_performed" };
+    if (provider === "app-storage" && layout) {
+      verificationStage = "anonymous private-object access check";
+      const bucketName = layout[0];
+      const relativeObjectName = [
+        ...layout.slice(1),
+        "gitai",
+        "repository-snapshots",
+        "v1",
+        "verification",
+        id,
+        `${created.sha256}.json`,
+      ].filter(Boolean).map(encodeURIComponent).join("/");
+      const unauthenticatedUrl = `https://storage.googleapis.com/${encodeURIComponent(bucketName)}/${relativeObjectName}`;
+      const publicResponse = await fetch(unauthenticatedUrl, {
+        method: "GET",
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      await publicResponse.body?.cancel();
+      if (publicResponse.status !== 403 && publicResponse.status !== 404) {
+        throw new Error("Synthetic private archive is readable without authentication.");
+      }
+      privacyCheck = { unauthenticatedReadDenied: true };
+    } else {
+      privacyCheck = { unauthenticatedReadCheck: "not_performed" };
     }
     return {
+      provider,
       storedAndRestored: true,
-      unauthenticatedReadDenied: true,
+      ...privacyCheck,
       idempotentRetry: true,
       mainHistoryVerified: true,
       proposalHistoryVerified: true,
@@ -172,10 +202,14 @@ async function verify() {
       snapshotSha256: createHash("sha256").update(document).digest("hex"),
     };
   } finally {
-    if (receipt) {
-      await openConfiguredPrivateRepositoryArchive("verification").removeVerification(receipt);
+    try {
+      if (receipt && archive) {
+        verificationStage = `${provider} synthetic object cleanup`;
+        await archive.removeVerification(receipt);
+      }
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
     }
-    rmSync(temporaryRoot, { recursive: true, force: true });
   }
 }
 
