@@ -14,6 +14,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openConfiguredPrivateRepositoryArchive } from "../lib/private-repository-archive";
 import { openConfiguredPrivateR2RepositoryArchive } from "../lib/r2-repository-archive";
+import { replicateRepositorySnapshot } from "../lib/replicated-repository-archive";
+import type { SnapshotReceipt } from "../lib/private-repository-archive";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../");
@@ -64,13 +66,14 @@ function createSyntheticRepository(sourceRoot: string, id: string) {
   return { repository, main, proposal };
 }
 
-type ArchiveProvider = "app-storage" | "r2";
+type ArchiveProvider = "app-storage" | "r2" | "dual";
 type PrivateArchive = ReturnType<typeof openConfiguredPrivateRepositoryArchive>;
 
 function archiveProviderFromArgs(args: string[]): ArchiveProvider {
   if (args.length === 0) return "app-storage";
   if (args.length === 1 && args[0] === "--r2") return "r2";
-  throw new Error("Use no option for App Storage or --r2 for Cloudflare R2.");
+  if (args.length === 1 && args[0] === "--dual") return "dual";
+  throw new Error("Use no option for App Storage, --r2 for R2, or --dual for both.");
 }
 
 function openArchive(provider: ArchiveProvider): PrivateArchive {
@@ -89,7 +92,7 @@ process.on("warning", warning => {
 async function verify() {
   const provider = archiveProviderFromArgs(process.argv.slice(2));
   let layout: string[] | undefined;
-  if (provider === "app-storage") {
+  if (provider !== "r2") {
     verificationStage = "private App Storage configuration";
     const privateDir = process.env.PRIVATE_OBJECT_DIR;
     if (!privateDir) throw new Error("Private App Storage is not configured.");
@@ -102,6 +105,16 @@ async function verify() {
     }
   }
 
+  // Validate BOTH configurations before creating fixtures or making any writes.
+  verificationStage = `${provider} configuration`;
+  const archive = openArchive(provider);
+  const backupArchive = provider === "dual"
+    ? openConfiguredPrivateR2RepositoryArchive("verification") : undefined;
+  const cleanup: { archive: PrivateArchive; receipt: SnapshotReceipt }[] = [];
+  const track = (target: PrivateArchive, receipt: SnapshotReceipt) => {
+    if (receipt.created) cleanup.push({ archive: target, receipt });
+  };
+
   verificationStage = "Synthetic fixture setup";
   const id = randomUUID();
   const temporaryRoot = mkdtempSync(join(tmpdir(), "gitai-private-archive-verification-"));
@@ -111,8 +124,6 @@ async function verify() {
   const restoreRoot = join(temporaryRoot, "restored");
   for (const path of [sourceRoot, localBackup, restoreRoot]) privateDirectory(path);
 
-  let receipt: Awaited<ReturnType<ReturnType<typeof openConfiguredPrivateRepositoryArchive>["put"]>> | undefined;
-  let archive: PrivateArchive | undefined;
   try {
     verificationStage = "synthetic Git repository";
     const { main, proposal } = createSyntheticRepository(sourceRoot, id);
@@ -128,18 +139,38 @@ async function verify() {
       throw new Error("Synthetic repository snapshot did not validate.");
     }
     const document = readFileSync(localReceipt.file);
-    verificationStage = `${provider} configuration`;
-    archive = openArchive(provider);
     verificationStage = `${provider} synthetic snapshot write`;
-    const created = await archive.put(id, document);
-    if (created.created) receipt = created;
-    verificationStage = "idempotent archive retry";
-    const retry = await archive.put(id, document);
-    if (!created.created || retry.created || retry.generation !== created.generation) {
-      throw new Error("Private archive retry was not idempotent.");
+    let created: SnapshotReceipt;
+    let downloaded: { bytes: Buffer; generation: string };
+    if (backupArchive) {
+      const request = {
+        primary: archive, backup: backupArchive, repositoryId: id, document,
+        onStored: (copy: "primary" | "backup", receipt: SnapshotReceipt) => {
+          track(copy === "primary" ? archive : backupArchive, receipt);
+        },
+      };
+      const pair = await replicateRepositorySnapshot(request);
+      verificationStage = "dual-provider idempotent retry";
+      const retry = await replicateRepositorySnapshot(request);
+      if (!pair.primary.created || !pair.backup.created ||
+          retry.primary.created || retry.backup.created ||
+          retry.primary.generation !== pair.primary.generation ||
+          retry.backup.generation !== pair.backup.generation) {
+        throw new Error("Dual archive retry was not idempotent.");
+      }
+      created = pair.backup;
+      downloaded = { bytes: pair.recoveryBytes, generation: pair.backup.generation };
+    } else {
+      created = await archive.put(id, document);
+      track(archive, created);
+      verificationStage = "idempotent archive retry";
+      const retry = await archive.put(id, document);
+      if (!created.created || retry.created || retry.generation !== created.generation) {
+        throw new Error("Private archive retry was not idempotent.");
+      }
+      verificationStage = `${provider} synthetic snapshot read`;
+      downloaded = await archive.get(id, created.sha256);
     }
-    verificationStage = `${provider} synthetic snapshot read`;
-    const downloaded = await archive.get(id, created.sha256);
     const downloadedSha256 = createHash("sha256").update(downloaded.bytes).digest("hex");
     if (downloaded.bytes.length !== created.bytes ||
         downloadedSha256 !== created.sha256 ||
@@ -164,8 +195,8 @@ async function verify() {
       throw new Error("Remote snapshot did not restore expected synthetic Git history.");
     }
 
-    let privacyCheck: { unauthenticatedReadDenied: true } | { unauthenticatedReadCheck: "not_performed" };
-    if (provider === "app-storage" && layout) {
+    let privacyCheck: Record<string, boolean | string>;
+    if (provider !== "r2" && layout) {
       verificationStage = "anonymous private-object access check";
       const bucketName = layout[0];
       const relativeObjectName = [
@@ -187,13 +218,17 @@ async function verify() {
       if (publicResponse.status !== 403 && publicResponse.status !== 404) {
         throw new Error("Synthetic private archive is readable without authentication.");
       }
-      privacyCheck = { unauthenticatedReadDenied: true };
+      privacyCheck = provider === "dual"
+        ? { appStorageUnauthenticatedReadDenied: true, r2UnauthenticatedReadCheck: "not_performed" }
+        : { unauthenticatedReadDenied: true };
     } else {
       privacyCheck = { unauthenticatedReadCheck: "not_performed" };
     }
     return {
       provider,
       storedAndRestored: true,
+      restoredFrom: provider === "dual" ? "r2" : provider,
+      bothCopiesReadVerified: provider === "dual",
       ...privacyCheck,
       idempotentRetry: true,
       mainHistoryVerified: true,
@@ -202,13 +237,14 @@ async function verify() {
       snapshotSha256: createHash("sha256").update(document).digest("hex"),
     };
   } finally {
-    try {
-      if (receipt && archive) {
-        verificationStage = `${provider} synthetic object cleanup`;
-        await archive.removeVerification(receipt);
-      }
-    } finally {
-      rmSync(temporaryRoot, { recursive: true, force: true });
+    // Attempt every cleanup even when a different provider is unavailable.
+    const results = await Promise.allSettled(
+      cleanup.map(({ archive: target, receipt }) => target.removeVerification(receipt)),
+    );
+    rmSync(temporaryRoot, { recursive: true, force: true });
+    if (results.some(result => result.status === "rejected")) {
+      verificationStage = `${provider} synthetic object cleanup`;
+      throw new Error("Synthetic object cleanup needs operator attention.");
     }
   }
 }

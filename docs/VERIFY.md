@@ -147,6 +147,9 @@ pnpm --filter @workspace/scripts exec tsx \
 # Run only after configuring a private R2 bucket and its workspace Secrets.
 pnpm --filter @workspace/scripts exec tsx \
   ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --r2
+# Both configurations required. Verifies both immutable copies, then restores from R2.
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --dual
 pnpm --filter @workspace/scripts exec tsx --test \
   ../artifacts/api-server/src/tests/commons.test.ts
 node --test tools/gitai-offline.test.mjs

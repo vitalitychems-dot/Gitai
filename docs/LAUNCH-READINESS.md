@@ -48,6 +48,17 @@ as application-level immutability, not native provider versions. Since R2
 random verification-only key after checking its ETag. Production snapshot keys
 are append-only through this adapter.
 
+A replication coordinator now writes and independently reads both copies,
+verifies matching identity/hash/scope/provider revisions, and returns backup
+bytes for recovery only after both checks pass. A backup outage leaves the
+primary intact; retrying repairs the missing copy without overwriting either.
+The manual `--dual` smoke path uses App Storage plus R2 and restores from R2.
+It preflights both configurations before writes and attempts cleanup on both
+providers, including when the other provider fails. R2 public-access policy
+still requires separate operator verification. Synthetic in-memory transports
+prove failure/retry behavior and real Git recovery after source/primary loss;
+they do not prove live R2 availability or independent infrastructure.
+
 Neither snapshot adapter is wired into application Git mutations or reads.
 App Storage is the only provider exercised remotely. No R2 account, private
 bucket, credentials, live R2 upload or independent restore has been verified.
@@ -85,6 +96,9 @@ pnpm --filter @workspace/scripts exec tsx \
   ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts
 pnpm --filter @workspace/scripts exec tsx \
   ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --r2
+# After BOTH providers are configured; reads both and restores specifically from R2.
+pnpm --filter @workspace/scripts exec tsx \
+  ../artifacts/api-server/src/tools/verify-private-snapshot-archive.ts --dual
 ```
 
 This command is not part of startup or CI and was not run against R2 because no
@@ -141,8 +155,8 @@ https://developers.cloudflare.com/r2/api/s3/api/.
 
 ## Rollout and rollback
 
-Current local receipts: full workspace typecheck/build, root unit tests (six marketplace
-plus ten recovery/archive/readiness tests), disposable DB integration (two groups),
+Current local receipts: full workspace typecheck/build, root unit tests (marketplace,
+recovery/archive/readiness and replication tests), disposable DB integration (two groups),
 production-refusal HTTP integration, normal and kernel-network-denied offline
 exchange tests, API bundle and root-path frontend bundle all passed. Signed-out
 browser checks passed at 390/768/1440 px; the 390px app screenshot was inspected.
