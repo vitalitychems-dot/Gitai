@@ -55,7 +55,8 @@ test("private archives are immutable, tenant-scoped and retry-idempotent", async
   const repositoryId = randomUUID();
   const document = makeSnapshot(repositoryId);
   const first = await archive.put(repositoryId, document);
-  const second = await archive.put(repositoryId, document);
+  const whitespaceVariant = Buffer.from(JSON.stringify(JSON.parse(document.toString("utf8")), null, 2), "utf8");
+  const second = await archive.put(repositoryId, whitespaceVariant);
   assert.equal(first.created, true);
   assert.equal(second.created, false);
   assert.equal(second.sha256, first.sha256);
@@ -84,7 +85,7 @@ test("malformed, cross-tenant, corrupt and conflicting archives are refused", as
   const receipt = await archive.put(repositoryId, document);
   const [name, stored] = [...objects.entries()][0];
   objects.set(name, { ...stored, bytes: Buffer.from("{}") });
-  await assert.rejects(archive.get(repositoryId, receipt.sha256), /integrity|digest|schema/);
+  await assert.rejects(archive.get(repositoryId, receipt.sha256), /integrity|digest|schema|content/);
   const wrongScopeArchive = createPrivateRepositoryArchive({
     directory: "/test-bucket/.private-data",
     scope: "development",

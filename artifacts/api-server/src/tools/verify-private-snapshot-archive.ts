@@ -110,16 +110,18 @@ async function verify() {
     const archive = openConfiguredPrivateRepositoryArchive("verification");
     verificationStage = "private App Storage write";
     const created = await archive.put(id, document);
+    receipt = created;
     verificationStage = "idempotent archive retry";
     const retry = await archive.put(id, document);
     if (!created.created || retry.created || retry.generation !== created.generation) {
       throw new Error("Private archive retry was not idempotent.");
     }
-    receipt = created;
-
     verificationStage = "private App Storage read";
     const downloaded = await archive.get(id, created.sha256);
-    if (!downloaded.bytes.equals(document) || downloaded.generation !== created.generation) {
+    const downloadedSha256 = createHash("sha256").update(downloaded.bytes).digest("hex");
+    if (downloaded.bytes.length !== created.bytes ||
+        downloadedSha256 !== created.sha256 ||
+        downloaded.generation !== created.generation) {
       throw new Error("Remote snapshot verification failed.");
     }
 

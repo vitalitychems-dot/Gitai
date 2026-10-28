@@ -4,6 +4,7 @@ import { appStorageClient } from "./app-storage-client";
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
+const STORAGE_REVISION = /^[A-Za-z0-9._/+=-]{1,128}$/;
 const MAX_PACK_BYTES = 12 * 1024 * 1024;
 const MAX_SNAPSHOT_BYTES = 17 * 1024 * 1024;
 const MAX_BASE64_CHARS = Math.ceil(MAX_PACK_BYTES / 3) * 4;
@@ -70,7 +71,8 @@ function validateDocument(expectedId: string, input: Uint8Array) {
       sha256(pack) !== result.data.packSha256) {
     fail("Private archive integrity verification failed.");
   }
-  const bytes = Buffer.from(input);
+  const bytes = Buffer.from(JSON.stringify(result.data), "utf8");
+  if (bytes.byteLength > MAX_SNAPSHOT_BYTES) fail("Invalid private archive document size.");
   return { bytes, sha: sha256(bytes), repositoryId: expectedId };
 }
 
@@ -119,11 +121,20 @@ export function createPrivateRepositoryArchive(
     try { remote = await driver.read(key); }
     catch { return fail(); }
     const expected = expectedMetadata(repositoryId, snapshotHash);
-    if (Object.keys(expected).some(k => remote.metadata[k as keyof typeof expected] !== expected[k as keyof typeof expected])) {
+    const metadataMatches = Object.keys(expected).every(
+      k => remote.metadata[k as keyof typeof expected] === expected[k as keyof typeof expected],
+    );
+    if (!metadataMatches) {
       return fail("Private repository archive metadata failed verification.");
     }
-    const local = validateDocument(repositoryId, remote.bytes);
-    if (local.sha !== snapshotHash) fail("Private repository archive digest failed verification.");
+    let local: ReturnType<typeof validateDocument>;
+    try { local = validateDocument(repositoryId, remote.bytes); }
+    catch {
+      return fail("Private repository archive content failed verification.");
+    }
+    if (local.sha !== snapshotHash) {
+      fail("Private repository archive digest failed verification.");
+    }
     return { bytes: local.bytes, generation: remote.generation };
   }
 
@@ -175,7 +186,7 @@ export function createPrivateRepositoryArchive(
     async removeVerification(receipt: SnapshotReceipt): Promise<void> {
       if (scope !== "verification" || !driver.remove ||
           receipt.scope !== "verification" || !UUID.test(receipt.repositoryId) ||
-          !SHA256.test(receipt.sha256) || !/^[1-9][0-9]*$/.test(receipt.generation)) {
+          !SHA256.test(receipt.sha256) || !STORAGE_REVISION.test(receipt.generation)) {
         fail("Only a verified synthetic archive may be removed by the verification tool.");
       }
       const key = objectName(receipt.repositoryId, receipt.sha256);
@@ -185,7 +196,7 @@ export function createPrivateRepositoryArchive(
   };
 }
 
-function gcsSnapshotDriver(bucketName: string): SnapshotObjectDriver {
+function gcsSnapshotDriver(bucketName: string, scope: ArchiveScope): SnapshotObjectDriver {
   const bucket = appStorageClient.bucket(bucketName);
   return {
     async create(name, bytes, metadata) {
@@ -214,6 +225,7 @@ function gcsSnapshotDriver(bucketName: string): SnapshotObjectDriver {
       } catch { return fail(); }
     },
     async read(name) {
+      let phase = "metadata";
       try {
         const file = bucket.file(name);
         const [metadata] = await file.getMetadata();
@@ -222,7 +234,24 @@ function gcsSnapshotDriver(bucketName: string): SnapshotObjectDriver {
             !/^[1-9][0-9]*$/.test(String(metadata.generation))) fail();
         const generation = String(metadata.generation);
         const versionedFile = bucket.file(name, { generation });
-        const [bytes] = await versionedFile.download({ validation: "crc32c" });
+        phase = "media";
+        const [responseBody] = await versionedFile.request({
+          method: "GET",
+          uri: "",
+          qs: { alt: "media", generation },
+          timeout: 30_000,
+        });
+        phase = "document";
+        let bytes: Buffer;
+        if (Buffer.isBuffer(responseBody)) {
+          bytes = responseBody;
+        } else if (typeof responseBody === "string") {
+          bytes = Buffer.from(responseBody, "utf8");
+        } else if (responseBody && typeof responseBody === "object") {
+          bytes = Buffer.from(JSON.stringify(responseBody), "utf8");
+        } else {
+          fail("Private repository archive returned an invalid document.");
+        }
         const custom = metadata.metadata ?? {};
         const accepted = z.object({
           gitaiRepositoryId: z.string().regex(UUID),
@@ -232,7 +261,16 @@ function gcsSnapshotDriver(bucketName: string): SnapshotObjectDriver {
         }).strict().safeParse(custom);
         if (!accepted.success || bytes.length !== byteLength) fail();
         return { bytes, generation, metadata: accepted.data };
-      } catch { return fail(); }
+      } catch (error) {
+        if (scope === "verification") {
+          const rawCode = error && typeof error === "object" && "code" in error ? Number(error.code) : NaN;
+          const status = [400, 401, 403, 404, 408, 409, 412, 413, 429, 500, 502, 503, 504].includes(rawCode)
+            ? String(rawCode)
+            : "other";
+          console.error(`Private App Storage read failed during ${phase} (status ${status}).`);
+        }
+        return fail();
+      }
     },
     async remove(name, generation) {
       if (!/^[1-9][0-9]*$/.test(generation)) fail();
@@ -248,6 +286,6 @@ export function openConfiguredPrivateRepositoryArchive(scope: ArchiveScope = pro
   return createPrivateRepositoryArchive({
     directory: rawDirectory!,
     scope,
-    driver: gcsSnapshotDriver(bucketName),
+    driver: gcsSnapshotDriver(bucketName, scope),
   });
 }

@@ -92,7 +92,8 @@ while anonymous and unrelated exports do not.
   visibility for every category, upcoming versus overdue seller deadlines,
   delivery decisions and redelivery, and disputed work/resolution responses.
   It also runs two local Git snapshot/restore tests, three private archive
-  verification tests and two production-readiness tests through `test:launch`.
+  verification tests, three synthetic-transport R2 adapter tests and two
+  production-readiness tests through `test:launch`.
   A separate real HTTP integration test verifies production health and mutations
   return 503 while the durable Git backend and independent backup are absent.
 - Real Playwright/Chromium checks at **390, 768 and 1440 px**:
@@ -118,13 +119,20 @@ while anonymous and unrelated exports do not.
   storage access was denied. The exact synthetic object was removed. No user
   repository was uploaded. This verifies one storage provider only, not an
   independent R2 backup or the active Git repository backend.
+- The Cloudflare R2 adapter's three unit tests use a fake transport to verify
+  conditional immutable writes, ETag-checked bounded reads, metadata validation,
+  and verification-only deletion. Cloudflare's documented R2 S3 API lacks
+  bucket-versioning operations; the adapter does not assume native versions.
+  No R2 credentials or bucket are configured, so no live R2 request, independent
+  restore or real backup has been tested.
 - A dependency upgrade moved workspace schemas to Zod 4.6.7, compatible generated
   schemas to Zod 4, Express to 5.3.0, body-parser to 2.4.0, qs to 6.16.1, and
   fast-uri to 3.1.9. Current pnpm, static and privacy scans report zero findings.
-  `@google-cloud/storage` 8.4.0 is Apache-2.0. The App Storage smoke emitted
-  nonfatal Node `MaxListenersExceededWarning` messages through the Google
-  request-stream dependency; they were not suppressed and need investigation
-  before that writer is enabled for long-lived production jobs.
+  `@google-cloud/storage` 8.4.0 is Apache-2.0. Its stream-based download emitted
+  listener warnings in the initial synthetic check. Replacing that path with a
+  bounded authenticated callback request removed the warning; a full remote
+  upload/retry/read/restore/delete run passed under `NODE_OPTIONS=--trace-warnings`.
+  `@aws-sdk/client-s3` 3.1156.0 is Apache-2.0 and passed the dependency audit.
 
 ## Reproduce
 

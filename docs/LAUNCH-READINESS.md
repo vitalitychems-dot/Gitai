@@ -31,15 +31,30 @@ An App Storage snapshot writer now stores immutable, hash-named private objects
 under the configured private prefix. A disposable synthetic Git smoke test
 uploaded, retried, downloaded and restored a small repository on a separate local
 node, verified anonymous access was denied, and deleted the exact test object.
-The test emitted nonfatal `MaxListenersExceededWarning` messages from the request
-stream dependency; they were not suppressed and need investigation before
-long-lived jobs use the writer.
+The first stream-based download path emitted nonfatal listener warnings. The
+bounded verification now uses the SDK's authenticated non-stream media request,
+limits it to 30 seconds and 17 MiB, canonicalizes validated JSON before hashing,
+and passes the complete remote test under `NODE_OPTIONS=--trace-warnings` without
+listener warnings.
 
-This is a tested, single-provider snapshot archive—not the active hosted Git
-backend, a second provider, retention policy or independent backup. The writer is
-not wired into application mutations or Git reads. Production remains fail-closed
-until Git/database consistency is implemented and tested, an independent backup
-is provisioned and restore-verified, and the stream warning is resolved.
+A separate Cloudflare R2 adapter is implemented but is not connected to an
+account. It uses a fixed endpoint derived from a validated account ID, atomic
+`If-None-Match: *` writes, ETag-conditional reads, strict metadata validation and
+bounded 30-second/17-MiB downloads. Its unit tests use a synthetic transport, not
+Cloudflare. The official R2 S3-compatibility table does not support bucket
+versioning; this adapter uses content-addressed keys and conditional no-overwrite
+as application-level immutability, not native provider versions. Since R2
+`DeleteObject` has no conditional ETag operation, deletion is restricted to a
+random verification-only key after checking its ETag. Production snapshot keys
+are append-only through this adapter.
+
+Neither snapshot adapter is wired into application Git mutations or reads.
+App Storage is the only provider exercised remotely. No R2 account, private
+bucket, credentials, live R2 upload or independent restore has been verified.
+This remains a snapshot archive, not an active hosted Git backend, database/Git
+consistency mechanism, retention policy or proven independent backup. Production
+remains fail-closed until durable Git/database consistency and an independently
+provisioned, restore-verified backup are implemented and tested.
 
 ## Private operator recovery
 
@@ -72,10 +87,13 @@ after a hard kill must be investigated before manual removal.
 
 1. **Independent backup:** the owner selected App Storage primary plus a private
    Cloudflare R2 backup. App Storage provisioning and the synthetic remote
-   round-trip passed, but no GitAI repository was uploaded. Cloudflare is not
-   connected, so no R2 writer, separate bucket, retention or restore test exists.
-   The App Storage service has no documented object versioning, lifecycle rules
-   or retention policies. Do not enable the production gate on one copy.
+   round-trip passed, but no GitAI repository was uploaded. R2 adapter code and
+   synthetic-transport tests exist; no R2 account, private bucket, credential,
+   real upload, independent restore or retention policy is configured. R2 does
+   not expose native bucket versioning through its documented S3 API. Verify a
+   bucket with public access disabled, least-privilege credentials, a real
+   synthetic upload/read/restore and documented retention before relying on it.
+   Do not enable the production gate on one copy.
 2. **Owner identity:** `GITAI_OWNER_SUBJECT` is absent in production configuration.
    Confirm the intended authenticated production operator through the secure
    configuration flow. Development and production Clerk accounts are separate;
@@ -91,30 +109,28 @@ after a hard kill must be investigated before manual removal.
    proxy was not replaced with an unreviewed homegrown auth proxy. Current canonical upstream
    identity/security gates must be preserved when reconciling the divergent local
    source. Public redistribution licensing is not fully established.
-5. **Archive client:** the synthetic App Storage check emitted nonfatal Node
-   `MaxListenersExceededWarning` messages in the Google request-stream dependency.
-   The cause was not isolated or hidden; investigate and repeat the bounded test
-   before using this client in a persistent job.
-6. **Privacy and operations:** finish retention/deletion, moderation staffing,
+5. **Privacy and operations:** finish retention/deletion, moderation staffing,
    abuse response and distributed quota decisions. Existing minimization and
    tenant checks are not legal/privacy certification. Production DB separation,
    storage recovery and authenticated smoke tests are not yet verified.
 
 References: `docs/SOURCE-AUDIT.md`, `docs/VERIFY.md`, `threat_model.md`,
 https://docs.replit.com/features/data-and-storage/object-storage and
-https://docs.replit.com/features/auth-and-identity/clerk-auth.
+https://docs.replit.com/features/auth-and-identity/clerk-auth, and
+https://developers.cloudflare.com/r2/api/s3/api/.
 
 ## Rollout and rollback
 
 Current local receipts: full workspace typecheck/build, root unit tests (six marketplace
-plus seven recovery/archive/readiness tests), disposable DB integration (two groups),
+plus ten recovery/archive/readiness tests), disposable DB integration (two groups),
 production-refusal HTTP integration, normal and kernel-network-denied offline
 exchange tests, API bundle and root-path frontend bundle all passed. Signed-out
 browser checks passed at 390/768/1440 px; the 390px app screenshot was inspected.
 The frontend build retains source-map and large-chunk warnings. Dependency,
 static-security and privacy scanners reported zero findings. A bounded synthetic
-App Storage upload/restore passed, with the listener warning above. These are local
-receipts, not authenticated browser acceptance, independent backup or deployment proof.
+App Storage upload/restore passed without the earlier request-stream warning.
+These are local receipts, not authenticated browser acceptance, independent
+backup or deployment proof.
 
 Do not publish this preparatory source while readiness is intentionally failing.
 The existing published build remains unchanged. Keep runner execution, collectors,
