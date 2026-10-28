@@ -64,6 +64,12 @@ function createSyntheticRepository(sourceRoot: string, id: string) {
 }
 
 let verificationStage = "App Storage configuration";
+process.on("warning", warning => {
+  if (warning.name === "MaxListenersExceededWarning") {
+    console.error(`Storage SDK listener warning observed during: ${verificationStage}.`);
+  }
+});
+
 async function verify() {
   verificationStage = "Private object directory availability";
   const privateDir = process.env.PRIVATE_OBJECT_DIR;
