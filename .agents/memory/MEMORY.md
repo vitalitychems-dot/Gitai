@@ -4,3 +4,4 @@
 - [GitAI source review](gitai-source-review.md) — reconcile the local branch with canonical main and preserve upstream identity and security gates before any publication.
 - [App Storage namespace prefixes](app-storage-private-prefix.md) — provider-assigned private prefixes can start with a dot; validate path components without rejecting safe hidden prefixes.
 - [GitAI backup policy](gitai-backup-policy.md) — App Storage is primary; Cloudflare R2 is the selected private backup and needs a real independent restore check.
+- [RunPod compute approval](gitai-runpod.md) — owner approved a RunPod API connection for GitAI and delegated GPU selection; workload limits still apply.
