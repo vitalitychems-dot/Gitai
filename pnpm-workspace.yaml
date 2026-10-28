@@ -76,6 +76,9 @@ onlyBuiltDependencies:
 
 overrides:
   markdown-it: 14.3.3
+  body-parser: 2.4.0
+  qs: 6.16.1
+  fast-uri: 3.1.9
   # replit uses linux-x64 only, we can exclude all other platforms
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"
